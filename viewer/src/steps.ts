@@ -1,4 +1,5 @@
 // Types for design.steps.json. Source of truth: schemas/steps.schema.json, docs/steps-format.md.
+import { reach } from './network'
 
 export type Vec3 = [number, number, number]
 
@@ -15,6 +16,7 @@ export interface Placement {
   position: Vec3
   rotation: Vec3
   color?: string
+  pins?: { id: string; position: Vec3 }[] // parts: pin tips in the part frame, for drawing legs
   // wires only
   from?: PinRef
   to?: PinRef
@@ -38,6 +40,10 @@ export interface Step {
   callouts?: { text: string; target: string; at?: Vec3 }[]
   dimensions?: { from: Vec3; to: Vec3; label: string }[]
   check?: string
+  /** Reference render after this step (file next to the steps JSON), shown to the AI by photo checks. */
+  picture?: string
+  /** The group this step belongs to ("Frame", "Wiring"); the build page folds steps by section. */
+  section?: string
 }
 
 export interface StepsDoc {
@@ -53,7 +59,7 @@ export interface StepsDoc {
 }
 
 export async function loadSteps(url: string): Promise<StepsDoc> {
-  const res = await fetch(url)
+  const res = await reach(url)
   if (!res.ok) throw new Error(`${url}: ${res.status} ${res.statusText}`)
   const doc = (await res.json()) as StepsDoc
   if (doc.format !== 'physical-studio-steps') throw new Error(`${url} is not a Physical Studio steps file`)

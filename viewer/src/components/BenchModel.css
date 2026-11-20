@@ -1,0 +1,26 @@
+.bench-model { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.bench-canvas { position: relative; width: 100%; border-radius: 10px; overflow: hidden; background: #ece9e4; overscroll-behavior: contain; }
+.bench-canvas canvas { touch-action: none; }
+.bench-hint { position: absolute; left: 12px; top: 10px; margin: 0; font-size: var(--t-xs); color: var(--muted); pointer-events: none; opacity: .85; }
+.bench-tools { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; font-size: 12px; pointer-events: none; }
+.bench-group { pointer-events: auto; display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--panel) 88%, transparent); backdrop-filter: blur(8px); box-shadow: var(--shadow-sm); }
+.bench-group button, .bench-group a { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; border-radius: 7px; padding: 5px 9px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 500; color: var(--ink-2); text-decoration: none; transition: background .15s, color .15s; }
+.bench-group button:hover, .bench-group a:hover { background: var(--bg); color: var(--ink); }
+.bench-group button[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent-ink); }
+.bench-group svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 760px) { .bench-hint { display: none; } }
+.part-label { position: relative; pointer-events: auto; transform: translate(-50%, calc(-100% - 6px)); white-space: nowrap; font: 500 11.5px/1.2 var(--font); color: var(--ink); background: color-mix(in srgb, var(--panel) 94%, transparent); border: 1px solid var(--line-strong); border-radius: var(--r-pill); padding: 3px 9px; box-shadow: 0 2px 6px rgba(20, 32, 43, .12); cursor: pointer; user-select: none; }
+.part-label::after { content: ''; position: absolute; left: 50%; top: 100%; width: 1px; height: 6px; background: var(--line-strong); }
+.part-label.new { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
+.part-label.picked { border-color: var(--accent); background: var(--accent); color: #fff; }
+.bench-info { margin: 0; font-size: 14px; line-height: 1.45; min-height: 20px; }
+.bench-parts { display: flex; flex-wrap: wrap; gap: 6px; max-height: 92px; overflow-y: auto; }
+.bench-parts button { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+.bench-parts button.new { border-color: var(--accent); color: var(--accent); }
+.bench-parts button.picked { background: var(--accent); border-color: var(--accent); color: #fff; }
+.bench-wires button { display: inline-flex; align-items: center; gap: 6px; }
+.wire-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.25); flex: none; }
+.wire-ends { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.wire-end { display: inline-flex; align-items: center; gap: 5px; }
+.wire-tag { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #26c6da; color: #06343a; font-size: 11px; font-weight: 700; flex: none; }
+.wire-label { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; transform: translate(8px, -50%); background: rgba(255, 255, 255, 0.94); color: #1f2933; border: 1px solid #26c6da; border-radius: 999px; padding: 2px 9px 2px 3px; font-size: 12px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15); }

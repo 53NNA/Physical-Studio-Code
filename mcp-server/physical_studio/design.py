@@ -40,6 +40,7 @@ class Placement:
     mount: bool = True  # boards: put standoffs under the mounting holes
     attached_to: str | None = None  # fasteners: placement id and hole id they go into
     hole: str | None = None
+    color: str | None = None  # "#rrggbb"; None uses the library category's color
 
 
 @dataclass
@@ -62,6 +63,8 @@ class Step:
     callouts: list[dict] = field(default_factory=list)
     dimensions: list[dict] = field(default_factory=list)
     check: str | None = None
+    section: str | None = None  # groups steps on the build page, e.g. "Cart and drive"
+    why: str | None = None  # one line on what this step is for, shown above the instruction
 
 
 @dataclass

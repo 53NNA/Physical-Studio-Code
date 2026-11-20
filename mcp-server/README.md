@@ -18,7 +18,7 @@ The repo's `.mcp.json` registers the server for anyone who opens Claude Code at 
 claude mcp add physical-studio -- uv run --directory /absolute/path/to/Physical-Studio-Code/mcp-server physical-studio-mcp
 ```
 
-Then ask for a design, e.g. "Simon game for an Arduino Uno, 4 colored buttons with LEDs, buzzer, USB accessible on the side." Exports go to `mcp-server/out/<title>/` (ignored by git) unless `out_dir` is given.
+Then ask for a design, e.g. "Traffic light for an Arduino Uno: red, yellow and green LEDs in a column on the lid, a crosswalk button, USB accessible on the side." Exports go to `mcp-server/out/<title>/` (ignored by git) unless `out_dir` is given.
 
 Environment variables: `PHYSICAL_STUDIO_PARTS` (parts folder, default `../parts`), `PHYSICAL_STUDIO_OUT` (export folder).
 
@@ -30,14 +30,18 @@ Environment variables: `PHYSICAL_STUDIO_PARTS` (parts folder, default `../parts`
 | `search_parts(query, category)` / `get_part(part_id)` | Look up parts; every dimension comes from here. |
 | `place_part(part_id, position, rotation, id, mount, name)` | Put a part's origin at `position` (mm), rotation in degrees (Euler XYZ). `name` is what the guide calls it ("Red LED"). Warns on overlapping envelopes. |
 | `add_fastener(part_id, target, hole)` | Put a screw into a board's mounting hole. |
-| `add_wire(from_placement, from_pin, to_placement, to_pin, color, inline)` | Jumper wire between two pins (from the parts' `pins`), routed as a curve; `inline` for a spliced resistor. Returns its length. Wiring plan for the demo: [docs/simon-wiring.md](../docs/simon-wiring.md). |
-| `create_enclosure(...)` | Base + lid sized around the placed parts, standoffs under mounted boards' holes, cutouts for connectors within `cutout_reach` (12 mm) of a wall, lid holes for `+z` connectors. |
+| `move_part(id, position, rotation)` | Move or rotate a placed part; its screws move with it. How the model fixes what the checks report. |
+| `remove_part(id)` | Remove a part, screw or wire (a part takes its screws and wires with it) and drop it from the steps. |
+| `add_wire(from_placement, from_pin, to_placement, to_pin, color, inline)` | Jumper wire between two pins (from the parts' `pins`), routed as a curve; `inline` for a spliced resistor. Returns its length. Wiring plan for the demo: [docs/traffic-light-wiring.md](../docs/traffic-light-wiring.md). |
+| `create_enclosure(...)` | Base + lid sized around the placed parts, standoffs under mounted boards' holes, cutouts for connectors within `cutout_reach` (12 mm) of a wall, lid holes for `+z` connectors. Parts with `lid_mount` (buttons, LEDs) set the lid height and poke through it; a warning says how far to raise any that sit lower. |
 | `add_step(title, text, add, motion, tools, callouts, dimensions, check)` | Append an assembly step. Without steps, export generates base, parts, fasteners, lid. |
 | `check_interference()` | Solid overlaps between every pair of pieces, and screws too long for their standoff. Intended contacts (screw in standoff) are listed separately. |
 | `check_clearance(min_gap, bed)` | Pieces closer than `min_gap` (1 mm), connectors that got no cutout, case bigger than the print bed (220 x 220 x 250). |
 | `render_preview(view, step, exploded, hide)` | PNG of the design with every piece labelled by id and a 10 mm scale bar, so Claude can look at its own work. Views: iso, iso_back, top, front, back, left, right. |
 | `describe_design()` | Placements, enclosure size, steps. |
-| `export(formats, out_dir)` | `glb` (+ `design.steps.json`), `stl` (base and lid), `step` (whole assembly). |
+| `set_part_look(part_id, color, metallic, roughness, top_image_url, source)` | How a part looks in the guide: colour, finish and a top-view photo the server downloads (public http(s) only, 4 MB cap, background trimmed). Kept with the design, not the library. |
+| `find_part_looks(part_ids)` | The server searches the web for each part's look (OpenAI web search, then Gemini with Google Search) and applies it. For designers that can't browse, like the site's design jobs. |
+| `export(formats, out_dir)` | `glb` (+ `design.steps.json` and a `design.png` thumbnail), `stl` (base and lid), `step` (whole assembly). Hosted: always under the designs folder, and returns `guide_url`. |
 
 Geometry is rebuilt from the design state on every call, so the order of `place_part` and `create_enclosure` doesn't matter.
 
@@ -48,6 +52,10 @@ Geometry is rebuilt from the design state on every call, so the order of `place_
 - `physical_studio/geometry.py`: part proxies (or STEP files), enclosure, standoffs, cutouts.
 - `physical_studio/checks.py`: interference, clearance, screw length, print-bed fit.
 - `physical_studio/render.py`: software z-buffer renderer for `render_preview` (no OpenGL needed).
-- `physical_studio/export.py`: GLB (written with trimesh so node names are placement ids), steps JSON, STL, STEP.
+- `physical_studio/export.py`: GLB (written with trimesh so node names are placement ids), steps JSON, STL, STEP. A part's `appearance` sets its material, and its top picture is a textured child node `<id>-top`.
+- `physical_studio/textures.py`: top-face pictures (a photo, or a drawn PCB).
+- `physical_studio/looks.py`: downloading part photos safely, and the web search behind `find_part_looks`.
+- `physical_studio/accounts.py`: personal keys for visitors' own AI (`POST /api/connect`) and the guides each key exported (`GET /api/my-projects`).
+- Not to be confused with `circuit-studio/geometry.py`: that's the Build helper's own breadboard renderer (Streamlit + three.js). This one serves the assembly guides.
 - `physical_studio/server.py`: the tools (`Studio`) and their FastMCP wrappers.
 

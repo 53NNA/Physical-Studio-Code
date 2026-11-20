@@ -29,6 +29,7 @@ FACE_NORMALS = {
 }
 # Which local axes a connector's [width, height] opening spans on each face.
 FACE_PLANE_AXES = {"x": (1, 2), "y": (0, 2), "z": (0, 1)}
+MATERIALS_DIR = Path(__file__).resolve().parents[2] / "parts" / "materials"
 CATEGORY_COLORS = {
     "board": "#1f6fb2",
     "input": "#e0b020",
@@ -55,6 +56,8 @@ class BuiltPiece:
     mesh: trimesh.Trimesh | None = None  # ready-made geometry, used instead of tessellating shape
     extra: dict = field(default_factory=dict)  # kind-specific fields for the steps JSON
     category: str | None = None  # library category for parts
+    path: np.ndarray | None = None  # wires: the centre line, pin to pin (design frame, mm)
+    finish: tuple[float, float] = (0.0, 0.6)  # (metallic, roughness) from the part's look, for the renders
 
     def local_mesh(self, tolerance: float = 0.05, angular: float = 0.3) -> trimesh.Trimesh:
         return self.mesh if self.mesh is not None else mesh_of(self.shape, tolerance, angular)
@@ -138,6 +141,29 @@ def box_between(lo, hi) -> Part:
 # --- parts ------------------------------------------------------------------------------
 
 
+def material_color(part: dict) -> str | None:
+    """The colour of the material a part's appearance names (parts/materials/materials.json)."""
+    name = (part.get("appearance") or {}).get("material")
+    if not name:
+        return None
+    from .export import material_library  # here to avoid a circular import at load time
+
+    return (material_library(MATERIALS_DIR).get(name) or {}).get("color")
+
+
+def part_finish(part: dict) -> tuple[float, float]:
+    """(metallic, roughness): the part's own look first, then its material's, then bare metal for
+    screws and matte for everything else."""
+    look = part.get("appearance") or {}
+    spec = {}
+    if look.get("material"):
+        from .export import material_library
+
+        spec = material_library(MATERIALS_DIR).get(look["material"]) or {}
+    metal = 0.6 if part.get("category") == "fastener" else 0.0
+    return (float(look.get("metallic", spec.get("metallic", metal))), float(look.get("roughness", spec.get("roughness", 0.6))))
+
+
 def part_shape(part: dict, parts_dir: Path) -> Part:
     step_file = part.get("step_file")
     if step_file and (parts_dir / step_file).exists():
@@ -147,9 +173,26 @@ def part_shape(part: dict, parts_dir: Path) -> Part:
     return proxy_shape(part)
 
 
+def lid_mount_z(part: dict) -> float | None:
+    """Height (part frame) where the lid's underside sits on a lid-mounted part, e.g. the top of a
+    tactile switch's square housing or an LED's flange. Above it only the +z openings continue."""
+    mount = part.get("lid_mount")
+    return float(mount["z"]) if mount else None
+
+
 def proxy_shape(part: dict) -> Part:
     """Body box plus connector blocks and above-board keep-outs, good enough to see and fit."""
     size = np.array(part["body"]["size"], dtype=float)
+    mz = lid_mount_z(part)
+    if mz is not None and 0 < mz < size[2]:
+        shape = box_between((0, 0, 0), (size[0], size[1], mz))
+        for conn in part.get("connectors", []):
+            if conn.get("face") == "+z":
+                w, h = conn["size"]
+                cx, cy, cz = conn["center"]
+                top = cz + float(conn.get("protrusion", 0.0))
+                shape = shape + box_between((cx - w / 2, cy - h / 2, mz), (cx + w / 2, cy + h / 2, top))
+        return shape
     shape = box_between((0, 0, 0), size)
     for conn in part.get("connectors", []):
         block = connector_block(conn, size)
@@ -209,6 +252,8 @@ def envelope(part: dict) -> tuple[np.ndarray, np.ndarray]:
 def enclosure_frame(design: Design, parts: dict[str, dict], spec: EnclosureSpec, warnings: list[str]):
     """Inner cavity (min, max) and the floor-top height, from the placed parts."""
     lo, hi = np.full(3, np.inf), np.full(3, -np.inf)
+    top = -np.inf  # highest top among parts that sit inside the case
+    lid_parts: list[tuple[str, float]] = []  # (placement id, design z of its lid mount)
     mounted_bottoms = []
     for p in design.placements.values():
         if p.kind == "fastener":
@@ -217,6 +262,11 @@ def enclosure_frame(design: Design, parts: dict[str, dict], spec: EnclosureSpec,
         m = placement_matrix(p.position, p.rotation)
         a, b = aabb(m, *envelope(part))
         lo, hi = np.minimum(lo, a), np.maximum(hi, b)
+        mz = lid_mount_z(part)
+        if mz is not None and np.allclose(m[:3, 2], (0, 0, 1)):
+            lid_parts.append((p.id, float(apply(m, (0, 0, mz))[2])))
+        else:
+            top = max(top, float(b[2]))
         if p.mount and part.get("mounting_holes"):
             mounted_bottoms.append(float(p.position[2]))
     if not np.isfinite(lo).all():
@@ -224,8 +274,15 @@ def enclosure_frame(design: Design, parts: dict[str, dict], spec: EnclosureSpec,
     floor_top = lo[2] - spec.margin
     if mounted_bottoms:
         floor_top = min(floor_top, min(mounted_bottoms) - spec.standoff_min)
+    lid_underside = max([top + spec.top_clearance] + [z for _, z in lid_parts])
+    for pid, z in lid_parts:
+        if lid_underside - z > 0.01:
+            warnings.append(
+                f"{pid}: its lid mount is {lid_underside - z:.2f} mm below the lid; raise it by that much "
+                f"(z + {lid_underside - z:.2f}) so it seats against the lid and pokes through"
+            )
     cavity_lo = np.array([lo[0] - spec.margin, lo[1] - spec.margin, floor_top])
-    cavity_hi = np.array([hi[0] + spec.margin, hi[1] + spec.margin, hi[2] + spec.top_clearance])
+    cavity_hi = np.array([hi[0] + spec.margin, hi[1] + spec.margin, lid_underside])
     return cavity_lo, cavity_hi
 
 
@@ -246,10 +303,18 @@ def build(design: Design, parts: dict[str, dict], parts_dir: Path) -> BuiltDesig
             name=p.name,
             shape=shape_cache[p.part_id],
             matrix=placement_matrix(p.position, p.rotation),
-            color=CATEGORY_COLORS.get(part.get("category", "misc"), "#999999"),
+            color=p.color
+            or (part.get("appearance") or {}).get("color")
+            or material_color(part)
+            or CATEGORY_COLORS.get(part.get("category", "misc"), "#999999"),
             position=tuple(p.position),
             rotation=tuple(p.rotation),
             category=part.get("category"),
+            finish=part_finish(part),
+            # Pin tips in the part frame, so the viewer can draw legs (display only).
+            extra={"pins": [{"id": q["id"], "position": [float(v) for v in q["position"]]} for q in part["pins"]]}
+            if part.get("pins")
+            else {},
         )
 
     built = BuiltDesign(pieces={}, warnings=warnings)
@@ -371,6 +436,7 @@ def wire_piece(design: Design, parts: dict[str, dict], wire: Wire) -> BuiltPiece
         matrix=np.eye(4),
         color=wire.color,
         mesh=tube(path, radii),
+        path=path,
         extra={
             "from": {"placement": wire.a[0], "pin": wire.a[1]},
             "to": {"placement": wire.b[0], "pin": wire.b[1]},
@@ -429,11 +495,14 @@ def connector_cutout(p, conn, m, spec, cavity_lo, cavity_hi, outer_lo, outer_hi,
     # Opening size in local axes, then mapped to design axes through the rotation.
     u, v = FACE_PLANE_AXES[face[1]]
     half_local = np.zeros(3)
-    half_local[u] = conn["size"][0] / 2 + spec.cutout_clearance
-    half_local[v] = conn["size"][1] / 2 + spec.cutout_clearance
+    clearance = float(conn.get("clearance", spec.cutout_clearance))
+    half_local[u] = conn["size"][0] / 2 + clearance
+    half_local[v] = conn["size"][1] / 2 + clearance
     half = np.abs(m[:3, :3]) @ half_local
     lo, hi = center - half, center + half
-    start = center[axis] - sign * 1.0  # a little inside the connector face
+    # A little inside the connector face, or inside the wall if the face is already past it
+    # (lid-mounted parts poke through the lid).
+    start = (min(center[axis], wall_inner) if sign > 0 else max(center[axis], wall_inner)) - sign * 1.0
     end = wall_outer + sign * 1.0
     lo[axis], hi[axis] = min(start, end), max(start, end)
     return target, box_between(lo, hi)

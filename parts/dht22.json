@@ -1,0 +1,111 @@
+{
+  "id": "dht22",
+  "name": "Temperature + humidity sensor DHT22 (AM2302)",
+  "category": "input",
+  "source": "Typical datasheet/standard numbers for this part or its most common breakout; not yet measured",
+  "step_file": null,
+  "body": {
+    "size": [
+      25.1,
+      15.1,
+      7.7
+    ]
+  },
+  "envelope": {
+    "min": [
+      0.0,
+      0.0,
+      -8.0
+    ],
+    "max": [
+      25.1,
+      15.1,
+      7.7
+    ]
+  },
+  "mounting_holes": [],
+  "connectors": [],
+  "pins": [
+    {
+      "id": "vcc",
+      "label": "VCC",
+      "position": [
+        8.74,
+        7.55,
+        -8.0
+      ],
+      "direction": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "id": "data",
+      "label": "DATA",
+      "position": [
+        11.28,
+        7.55,
+        -8.0
+      ],
+      "direction": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "id": "nc",
+      "label": "NC",
+      "position": [
+        13.82,
+        7.55,
+        -8.0
+      ],
+      "direction": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "id": "gnd",
+      "label": "GND",
+      "position": [
+        16.36,
+        7.55,
+        -8.0
+      ],
+      "direction": [
+        0,
+        0,
+        -1
+      ]
+    }
+  ],
+  "notes": "Like the DHT11 but more accurate. 10 kΩ pull-up from DATA to VCC.",
+  "verified": false,
+  "verified_by": null,
+  "verified_on": null,
+  "appearance": {
+    "color": "#ece9e2",
+    "metallic": 0.0,
+    "roughness": 0.8,
+    "source": "Typical colour of the common part"
+  },
+  "electrical": {
+    "supply_v": [
+      3.3,
+      6.0
+    ],
+    "current_ma": 1,
+    "peak_ma": 2,
+    "signal_v": "supply",
+    "source": "Typical datasheet numbers; not yet measured"
+  },
+  "datasheet_checked": {
+    "on": "2026-10-26",
+    "source": "https://cdn.sparkfun.com/assets/f/7/d/9/c/DHT22.pdf",
+    "checked": "pins 1 VDD, 2 DATA, 3 NC, 4 GND; 3.3-6 V; 1-1.5 mA measuring"
+  }
+}

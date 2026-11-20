@@ -13,6 +13,7 @@ services:
       - "443:443/udp"
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN in deploy/.env}
+      FRONT_HOSTS: ${FRONT_HOSTS:-front.invalid}  # see deploy/front.sh
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -20,6 +21,7 @@ services:
     depends_on:
       - viewer
       - mcp
+      - studio
 
   viewer:
     build:
@@ -28,7 +30,12 @@ services:
     restart: unless-stopped
     environment:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_API_KEYS: ${GEMINI_API_KEYS:-},${STUDIO_GEMINI_API_KEYS:-}
       GEMINI_LIVE_MODEL: ${GEMINI_LIVE_MODEL:-gemini-3.8-live}
+      GEMINI_CHECK_MODEL: ${GEMINI_CHECK_MODEL:-gemini-3.8-flash}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_CHECK_MODEL: ${DEEPSEEK_CHECK_MODEL:-deepseek-flash}
+      CHECKS_PER_MINUTE: ${CHECKS_PER_MINUTE:-30}
       DEMO_CODE: ${DEMO_CODE:-}
       TOKENS_PER_MINUTE: ${TOKENS_PER_MINUTE:-6}
     volumes:
@@ -42,8 +49,32 @@ services:
     environment:
       MCP_TOKEN: ${MCP_TOKEN:?set MCP_TOKEN in deploy/.env}
       MCP_ALLOWED_HOSTS: ${DOMAIN}
+      DESIGN_PROVIDERS: ${DESIGN_PROVIDERS:-openai,deepseek,gemini,anthropic}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_DESIGN_MODEL: ${OPENAI_DESIGN_MODEL:-gpt-6.1-sol}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_DESIGN_MODEL: ${DEEPSEEK_DESIGN_MODEL:-deepseek-flash}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_API_KEYS: ${GEMINI_API_KEYS:-},${STUDIO_GEMINI_API_KEYS:-}
+      GEMINI_DESIGN_MODEL: ${GEMINI_DESIGN_MODEL:-gemini-3.8-flash}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DESIGN_MODEL: ${DESIGN_MODEL:-claude-opus-5-5}
+      DESIGNS_PER_HOUR: ${DESIGNS_PER_HOUR:-4}
+      # Breadboard builds per client IP an hour (physical_studio/bench). A venue shares one IP.
+      BUILDS_PER_HOUR: ${BUILDS_PER_HOUR:-12}
+      DEMO_CODE: ${DEMO_CODE:-}
     volumes:
       - designs:/data/out
+
+  studio:
+    build:
+      context: ..
+      dockerfile: deploy/studio.Dockerfile
+    restart: unless-stopped
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_API_KEYS: ${GEMINI_API_KEYS:-},${STUDIO_GEMINI_API_KEYS:-}
+      GEMINI_MODEL: ${GEMINI_STUDIO_MODEL:-gemini-3.8-flash}
 
 volumes:
   designs:

@@ -1,0 +1,248 @@
+{
+  "id": "drv8874-board",
+  "name": "DRV8874 motor driver board",
+  "category": "board",
+  "source": "Pololu DRV8874 carrier #4035: 0.6 x 0.7 in, pinout from its top-view picture; not yet measured",
+  "step_file": null,
+  "body": {
+    "size": [
+      15.24,
+      17.78,
+      1.6
+    ]
+  },
+  "envelope": {
+    "min": [
+      0,
+      0,
+      0
+    ],
+    "max": [
+      15.24,
+      17.78,
+      3
+    ]
+  },
+  "pins": [
+    {
+      "id": "vm",
+      "label": "VM",
+      "position": [
+        1.27,
+        16.51,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "gnd",
+      "label": "GND",
+      "position": [
+        1.27,
+        13.970000000000002,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "in1",
+      "label": "EN/IN1",
+      "position": [
+        1.27,
+        11.430000000000001,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "in2",
+      "label": "PH/IN2",
+      "position": [
+        1.27,
+        8.89,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "pmode",
+      "label": "PMODE",
+      "position": [
+        1.27,
+        6.350000000000001,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "nsleep",
+      "label": "SLEEP",
+      "position": [
+        1.27,
+        3.8100000000000023,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "vref",
+      "label": "VREF",
+      "position": [
+        1.27,
+        1.2700000000000014,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "vin",
+      "label": "VIN",
+      "position": [
+        13.97,
+        16.51,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "gnd_p",
+      "label": "GND",
+      "position": [
+        13.97,
+        13.970000000000002,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "out1",
+      "label": "OUT1",
+      "position": [
+        13.97,
+        11.430000000000001,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "out2",
+      "label": "OUT2",
+      "position": [
+        13.97,
+        8.89,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "imode",
+      "label": "IMODE",
+      "position": [
+        13.97,
+        6.350000000000001,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "nfault",
+      "label": "FAULT",
+      "position": [
+        13.97,
+        3.8100000000000023,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "cs",
+      "label": "CS",
+      "position": [
+        13.97,
+        1.2700000000000014,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    }
+  ],
+  "appearance": {
+    "color": "#1f6f48",
+    "roughness": 0.5,
+    "top": {
+      "image": "drv8874-board.top.jpg"
+    },
+    "source": "https://www.pololu.com/product/4035 (picture 0J11426)",
+    "material": "pcb"
+  },
+  "notes": "H-bridge, motor supply 4.5 to 37 V on VIN, 2.1 A continuous. PMODE high = IN/IN (PWM) mode; SLEEP high to run. VM is the reverse-protected motor voltage, an output.",
+  "verified": false,
+  "verified_by": null,
+  "verified_on": null,
+  "electrical": {
+    "supply_v": [
+      4.5,
+      37.0
+    ],
+    "current_ma": 3,
+    "peak_ma": 3,
+    "note": "VIN; 2.1 A continuous",
+    "source": "Typical datasheet numbers; not yet measured",
+    "drive_ma": 2100
+  }
+}

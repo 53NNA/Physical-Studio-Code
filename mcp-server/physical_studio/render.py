@@ -1,4 +1,5 @@
-"""Software renderer for render_preview: orthographic, z-buffered, flat shaded, outlined edges.
+"""Software renderer for render_preview: orthographic, z-buffered, outlined edges, shaded by each part's
+finish (metal reflects and shines, plastic stays matte) with screen-space ambient occlusion.
 
 No OpenGL needed, so it works on headless servers. Output is a PNG with each visible
 placement labelled by its id and a 10 mm scale bar, so Claude can check its own design.
@@ -17,6 +18,9 @@ VIEWS = {
     # direction from the design towards the camera, design frame (+Z up)
     "iso": (-1.0, -1.0, 0.9),  # front-left-top: the -x wall (USB side) and the front are visible
     "iso_back": (1.0, 1.0, 0.9),
+    "iso_right": (1.0, -1.0, 0.9),  # front-right-top
+    "iso_left_back": (-1.0, 1.0, 0.9),
+    "below": (-1.0, -1.0, -0.8),  # front-left, from underneath: parts under a plate (a pinion under a cart)
     "top": (0.0, 0.0, 1.0),
     "front": (0.0, -1.0, 0.0),
     "back": (0.0, 1.0, 0.0),
@@ -46,6 +50,41 @@ def camera_basis(view: str):
     return right, up, forward
 
 
+def ambient_occlusion(zbuf: np.ndarray, hit: np.ndarray, scale: float, strength: float = 0.35) -> np.ndarray:
+    """A screen-space ambient-occlusion factor (1 = open, down to 1 - strength): a surface sitting
+    behind what's around it on screen (a plate next to a motor, the bottom of a slot) is darkened by how
+    far it sits behind, measured against the window's size in mm, so a big machine and a small case
+    darken alike. The background counts as far away, so silhouettes don't darken themselves."""
+    H, W = zbuf.shape
+    r = max(3, int(0.012 * max(H, W)))
+    far = np.where(hit, zbuf, np.nan)
+    if not np.isfinite(far).any():
+        return np.ones_like(zbuf)
+    reach = r / scale  # mm: how deep a crease the window counts
+    z = np.where(hit, zbuf, np.nanmax(far) + 4 * reach)
+    # Opposite pairs of samples on three rings around each pixel. A pair's mean height above the pixel
+    # is zero on any flat surface however it slopes, and positive in a crease or where a part stands on
+    # a plate, so only real corners darken. A sample far in front (an arm passing over a plate) fades
+    # out by three reaches, sample by sample, so silhouettes get no halo and no ring.
+    total = np.zeros_like(z)
+    count = 0
+    for radius in (r / 3, 2 * r / 3, r):
+        for a in np.arange(4) * np.pi / 4 + radius:  # half a circle: each pair covers both sides
+            dy, dx = int(round(radius * np.sin(a))), int(round(radius * np.cos(a)))
+            d1 = (z - np.roll(z, (dy, dx), axis=(0, 1))) / reach
+            d2 = (z - np.roll(z, (-dy, -dx), axis=(0, 1))) / reach
+            keep = np.clip(1.5 - 0.5 * np.maximum(d1, d2), 0, 1)
+            total += np.clip((d1 + d2) / 2, 0, 1) * keep
+            count += 1
+    return 1 - strength * np.clip(2 * total / count, 0, 1)
+
+
+def spin(degrees: float) -> np.ndarray:
+    """Rotation about a piece's own z axis (a screw's axis: its head is at the top of its local frame)."""
+    a = np.radians(degrees)
+    return np.array([[np.cos(a), -np.sin(a), 0.0], [np.sin(a), np.cos(a), 0.0], [0.0, 0.0, 1.0]])
+
+
 def render(
     built: BuiltDesign,
     view: str = "iso",
@@ -54,23 +93,45 @@ def render(
     highlight: set[str] | None = None,
     size: tuple[int, int] = (900, 680),
     labels: bool = True,
+    stats: dict | None = None,
+    textures: dict | None = None,
+    focus: set[str] | None = None,
+    camera: tuple[float, float, float] | None = None,
+    turns: dict[str, float] | None = None,
 ) -> bytes:
+    """stats, when given, gets "highlight_px": how many pixels of the highlighted pieces are visible,
+    "wires": each visible wire's centre line in output pixels, and "camera": the framing used. textures:
+    piece id -> a textured quad in the piece's frame (export.top_face: a board's top photo), drawn on the
+    piece. focus: piece ids to frame in a close-up instead of fitting the whole build. camera: a framing
+    from an earlier render's stats, so pictures of the same step (its motion frames) share one camera.
+    turns: piece id -> degrees about its own z axis (a screw turning), drawn with a cross on its head."""
     right, up, forward = camera_basis(view)
     offsets = offsets or {}
     highlight = highlight or set()
+    textures = textures or {}
+    turns = turns or {}
     ids = [pid for pid in built.pieces if visible is None or pid in visible]
     if not ids:
         raise ValueError("nothing to render")
 
-    tris, owners = [], []
+    tris, owners, tex_of, images, uvs = [], [], [], [], []
     for k, pid in enumerate(ids):
         piece = built.pieces[pid]
-        mesh = piece.local_mesh(tolerance=0.1, angular=0.5)
-        v = mesh.vertices @ piece.matrix[:3, :3].T + piece.matrix[:3, 3] + offsets.get(pid, 0)
-        tris.append(v[mesh.faces])
-        owners.append(np.full(len(mesh.faces), k))
+        quad = textures.get(pid)
+        for mesh, tex in ((piece.local_mesh(tolerance=0.1, angular=0.5), -1), (quad, len(images))):
+            if mesh is None:
+                continue
+            v = mesh.vertices @ spin(turns.get(pid, 0)).T @ piece.matrix[:3, :3].T + piece.matrix[:3, 3] + offsets.get(pid, 0)
+            tris.append(v[mesh.faces])
+            owners.append(np.full(len(mesh.faces), k))
+            tex_of.append(np.full(len(mesh.faces), tex))
+            if tex >= 0:
+                images.append(np.asarray(mesh.visual.material.baseColorTexture.convert("RGB"), dtype=float))
+                uvs.append(np.asarray(mesh.visual.uv, dtype=float)[mesh.faces])
     tris = np.concatenate(tris)  # (T, 3, 3)
     owners = np.concatenate(owners)
+    tex_of = np.concatenate(tex_of)
+    tex_tri = np.cumsum(tex_of >= 0) - 1  # triangle -> its row in the uv list
 
     normals = np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
     lengths = np.linalg.norm(normals, axis=1, keepdims=True)
@@ -83,12 +144,28 @@ def render(
     span_x, span_y = sx.max() - sx.min(), sy.max() - sy.min()
     scale = min(W * (1 - 2 * margin) / max(span_x, 1e-6), H * (1 - 2 * margin) / max(span_y, 1e-6))
     cx, cy = (sx.max() + sx.min()) / 2, (sy.max() + sy.min()) / 2
+    keep = [k for k, pid in enumerate(ids) if focus and pid in focus]
+    if keep:
+        # Close-up: frame these pieces with room around them (at least a third of the whole build's
+        # width, so the builder can still tell where on the machine this is). The rest is cropped.
+        sel = np.isin(owners, keep)
+        fx, fy = sx[sel], sy[sel]
+        fw = max(1.5 * (fx.max() - fx.min()), span_x / 3)
+        fh = max(1.5 * (fy.max() - fy.min()), span_y / 3)
+        scale = min(W * (1 - 2 * margin) / max(fw, 1e-6), H * (1 - 2 * margin) / max(fh, 1e-6))
+        cx, cy = (fx.max() + fx.min()) / 2, (fy.max() + fy.min()) / 2
+    if camera is not None:
+        cx, cy, scale = camera
+    if stats is not None:
+        stats["camera"] = (float(cx), float(cy), float(scale))
     px = (sx - cx) * scale + W / 2
     py = H / 2 - (sy - cy) * scale
 
     zbuf = np.full((H, W), np.inf)
     owner_buf = np.full((H, W), -1, dtype=np.int64)
     normal_buf = np.zeros((H, W, 3))
+    tri_buf = np.full((H, W), -1, dtype=np.int64)
+    bary_buf = np.zeros((H, W, 2))
 
     for t in range(len(tris)):
         x0, x1, x2 = px[t]
@@ -113,16 +190,62 @@ def render(
         zbuf[window][closer] = z[closer]
         owner_buf[window][closer] = owners[t]
         normal_buf[window][closer] = normals[t]
+        if tex_of[t] >= 0:
+            tri_buf[window][closer] = t
+            bary_buf[window][closer] = np.stack([w0, w1], axis=-1)[closer]
+        else:
+            tri_buf[window][closer] = -1
 
-    # Flat shading: key light from over the camera's left shoulder, plus ambient.
+    # Key light from over the camera's left shoulder, plus ambient, then the part's finish: metal
+    # (metallic, roughness from its look) gets a darker body, a sky-to-floor reflection and a highlight,
+    # so steel reads as steel and a printed part stays matte. Creases and contacts get ambient occlusion.
     light = -forward + 0.6 * up - 0.4 * right
     light /= np.linalg.norm(light)
     base = np.array([hex_rgb(built.pieces[pid].color) for pid in ids])
+    finish = np.array([built.pieces[pid].finish for pid in ids], dtype=float)
     hit = owner_buf >= 0
     shade = 0.45 + 0.55 * np.clip(normal_buf @ light, 0, 1)
     image = np.empty((H, W, 3))
     image[:] = BACKGROUND
-    image[hit] = base[owner_buf[hit]] * shade[hit, None]
+    metal, rough = finish[owner_buf[hit], 0], finish[owner_buf[hit], 1]
+    n = normal_buf[hit]
+    view_dir = -forward
+    reflect = 2 * (n @ view_dir)[:, None] * n - view_dir  # mirror of the view ray about the normal
+    sky = 0.75 + 0.45 * np.clip(reflect @ np.array([0.0, 0.0, 1.0]), -1, 1)  # brighter where it mirrors the sky
+    half = (light + view_dir) / np.linalg.norm(light + view_dir)
+    gloss = np.clip(n @ half, 0, 1) ** (4 + 60 * (1 - rough) ** 2)
+    body = base[owner_buf[hit]] * shade[hit, None] * (1 - 0.35 * metal)[:, None]
+    mirror = base[owner_buf[hit]] * (sky * metal * 0.45)[:, None]
+    highlight_ = (255 * gloss * (0.08 + 0.5 * metal) * (1 - 0.6 * rough))[:, None]
+    image[hit] = body + mirror + highlight_
+    occlusion = ambient_occlusion(zbuf, hit, scale)
+    textured = tri_buf >= 0
+    if textured.any():
+        t = tri_buf[textured]
+        w0, w1 = bary_buf[textured, 0], bary_buf[textured, 1]
+        uv_tri = np.concatenate(uvs)[tex_tri[t]]
+        uv = w0[:, None] * uv_tri[:, 0] + w1[:, None] * uv_tri[:, 1] + (1 - w0 - w1)[:, None] * uv_tri[:, 2]
+        colour = np.empty((len(t), 3))
+        for i, img in enumerate(images):
+            sel = tex_of[t] == i
+            h, w = img.shape[:2]
+            x = np.clip((uv[sel, 0] * w).astype(int), 0, w - 1)
+            y = np.clip(((1 - uv[sel, 1]) * h).astype(int), 0, h - 1)  # uv origin bottom-left, rows top-down
+            colour[sel] = img[y, x]
+        image[textured] = colour * (0.75 + 0.25 * shade[textured, None])
+    image[hit] *= occlusion[hit, None]
+    if stats is not None:
+        lit = [k for k, pid in enumerate(ids) if pid in highlight]
+        stats["highlight_px"] = int(np.isin(owner_buf, lit).sum()) if lit else 0
+        stats["wires"] = {}
+        for pid in ids:
+            path = built.pieces[pid].path
+            if path is None:
+                continue
+            p = path + offsets.get(pid, 0)
+            x = ((p @ right - cx) * scale + W / 2) / SUPERSAMPLE
+            y = (H / 2 - (p @ up - cy) * scale) / SUPERSAMPLE
+            stats["wires"][pid] = np.round(np.stack([x, y], axis=1)[:: max(1, len(p) // 16)].tolist() + [[x[-1], y[-1]]], 1).tolist()
     for k, pid in enumerate(ids):
         if pid in highlight:
             mask = owner_buf == k
@@ -133,11 +256,14 @@ def render(
     smooth = np.array([built.pieces[pid].kind == "wire" for pid in ids])
     on_smooth = hit & smooth[np.where(hit, owner_buf, 0)]
     edges = np.zeros((H, W), dtype=bool)
+    # A depth jump counts as an edge when it's more than a slanted surface's change across a few pixels:
+    # 0.4 mm on a small enclosure, more on a half-metre machine (else every sloped face turns to outline).
+    jump = max(0.4, 3.0 / scale)
     for axis in (0, 1):
         o2 = np.roll(owner_buf, -1, axis=axis)
         n2 = np.roll(normal_buf, -1, axis=axis)
         z2 = np.roll(zbuf, -1, axis=axis)
-        step_edge = np.abs(np.where(hit, zbuf, 0) - np.where(o2 >= 0, z2, 0)) > 0.4  # depth jump, mm
+        step_edge = np.abs(np.where(hit, zbuf, 0) - np.where(o2 >= 0, z2, 0)) > jump  # depth jump, mm
         corner = ((normal_buf * n2).sum(axis=2) < 0.85) & ~on_smooth
         crease = (owner_buf != o2) | corner | (step_edge & ~on_smooth)
         crease &= hit | (o2 >= 0)
@@ -147,6 +273,26 @@ def render(
     img = Image.fromarray(image.clip(0, 255).astype(np.uint8)).resize(size, Image.LANCZOS)
     draw = ImageDraw.Draw(img)
     font = ImageFont.load_default(size=13)
+
+    # A cross on each turning screw's head, so the turn shows on a round head (drawn only where the
+    # head's centre is in sight).
+    for k, pid in enumerate(ids):
+        piece = built.pieces[pid]
+        if pid not in turns or piece.kind != "fastener":
+            continue
+        lo, hi = piece.local_mesh(tolerance=0.1, angular=0.5).bounds
+        r = 0.3 * min(hi[0] - lo[0], hi[1] - lo[1])
+        a = np.radians(turns[pid])
+        local = np.array([[0, 0, hi[2]], *([r * np.cos(a + q), r * np.sin(a + q), hi[2]] for q in (0, np.pi / 2, np.pi, 1.5 * np.pi))])
+        world = local @ piece.matrix[:3, :3].T + piece.matrix[:3, 3] + offsets.get(pid, 0)
+        x = (world @ right - cx) * scale + W / 2
+        y = H / 2 - (world @ up - cy) * scale
+        c0, r0 = int(x[0]), int(y[0])
+        if not (0 <= c0 < W and 0 <= r0 < H) or owner_buf[r0, c0] != k:
+            continue
+        pts = np.stack([x, y], axis=1) / SUPERSAMPLE
+        for i, j in ((1, 3), (2, 4)):
+            draw.line((*pts[i], *pts[j]), fill=(31, 35, 42), width=2)
 
     if labels:
         for k, pid in enumerate(ids):

@@ -7,7 +7,7 @@ The MCP server's `export` tool writes two files into one folder:
 
 The viewer loads both. The step tracker (Gemini) reads the same JSON to know what each step should look like.
 
-Example: [`schemas/examples/simon.steps.json`](../schemas/examples/simon.steps.json).
+Example: [`schemas/examples/traffic-light.steps.json`](../schemas/examples/traffic-light.steps.json).
 
 ## Frames and units
 
@@ -17,7 +17,7 @@ Example: [`schemas/examples/simon.steps.json`](../schemas/examples/simon.steps.j
 
 ## Placements
 
-`placements` lists everything in the GLB: enclosure pieces (`kind: "enclosure"`, `part: null`), library parts (`kind: "part"`), fasteners (`kind: "fastener"`) and wires (`kind: "wire"`, `part: null`). A wire also has `from` / `to` (`{placement, pin}`, pin ids from the parts library), `length_mm` and optionally `inline` (a component spliced into it, e.g. a resistor); its mesh is already routed, so the viewer treats it like any other node. `position`/`rotation` repeat the node's transform for anything that doesn't read the GLB (rotation is degrees, Euler order XYZ, the same as three.js `Euler` with order `'XYZ'`).
+`placements` lists everything in the GLB: enclosure pieces (`kind: "enclosure"`, `part: null`), library parts (`kind: "part"`), fasteners (`kind: "fastener"`) and wires (`kind: "wire"`, `part: null`). A wire also has `from` / `to` (`{placement, pin}`, pin ids from the parts library), `length_mm` and optionally `inline` (a component spliced into it, e.g. a resistor); its mesh is already routed, so the viewer treats it like any other node. A part with pins also has `pins` (`[{id, position}]`, pin tips in the part's own frame) so the viewer can draw its legs; the GLB has no leg geometry. `position`/`rotation` repeat the node's transform for anything that doesn't read the GLB (rotation is degrees, Euler order XYZ, the same as three.js `Euler` with order `'XYZ'`).
 
 ## Steps
 
@@ -33,3 +33,13 @@ To show step *n*, the viewer:
 For an exploded view of the whole design, offset each placement by the `from_offset` of the step that added it.
 
 `check` is a one-line description of what a correct result looks like on camera, for example "LED long leg (anode) in the hole marked +". Gemini compares the workbench against it.
+
+`picture` (written by export) is a reference render of the build after this step, `step-01.png` and so on next to the steps JSON, with the step's new parts highlighted and the lid left off until it goes on. Photo checks show it to the AI as what a correct result looks like.
+
+`section` (optional) groups steps: "Frame", "Cart and drive motor", "Wiring". The build page folds its step list by section, so long builds stay readable.
+
+`why` (optional) is one short line on what the step is for in the finished build ("The rail is what the cart rides on, so it has to be straight."). The build page shows it above the instruction.
+
+## Print info
+
+`print` (when the design has a case) lists the printed pieces: `size_mm` of the closed case, and per piece its `file` (`design-base.stl`, `design-lid.stl`), `grams` of PLA and estimated `minutes` (a rough 12 g/h, shown as an estimate), plus totals and `step_file`. The Print screen reads it.

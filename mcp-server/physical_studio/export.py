@@ -8,8 +8,11 @@ See docs/steps-format.md.
 
 from __future__ import annotations
 
+import io
 import json
+import functools
 import math
+import re
 from pathlib import Path
 
 import numpy as np
@@ -18,6 +21,8 @@ from build123d import export_step, export_stl
 
 from .design import Design, Step
 from .geometry import BuiltDesign, assembly
+from .render import SUPERSAMPLE, camera_basis, render
+from .textures import top_image
 
 DESIGN_TO_GLTF = np.array(
     [
@@ -34,26 +39,132 @@ def hex_to_rgba(color: str) -> list[int]:
     return [int(c[i : i + 2], 16) for i in (0, 2, 4)] + [255]
 
 
-def write_glb(built: BuiltDesign, path: Path) -> None:
+# --- materials (parts/materials/, made by examples/make_materials.py) -----------------------------
+# A part's appearance may name a material, SketchUp style: a seamless greyscale detail texture that
+# the part's colour tints, a finish (metallic, roughness) and its real size per tile in mm.
+
+
+@functools.lru_cache(maxsize=8)
+def material_library(materials_dir: Path) -> dict[str, dict]:
+    try:
+        return json.loads((materials_dir / "materials.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+@functools.lru_cache(maxsize=32)
+def material_texture(materials_dir: Path, name: str):
+    from PIL import Image
+
+    spec = material_library(materials_dir).get(name)
+    return Image.open(materials_dir / spec["file"]).convert("RGB") if spec else None
+
+
+def box_uv(mesh: trimesh.Trimesh, tile_mm: float) -> trimesh.Trimesh:
+    """Each face gets its own corners and UVs from the two axes it faces least (a box projection),
+    in millimetres / tile_mm, so a 400 mm rail repeats the texture instead of stretching one tile."""
+    corners = mesh.vertices[mesh.faces].reshape(-1, 3)
+    axis = np.repeat(np.abs(mesh.face_normals).argmax(axis=1), 3)
+    u = np.where(axis == 0, corners[:, 1], corners[:, 0])
+    v = np.where(axis == 2, corners[:, 1], corners[:, 2])
+    out = trimesh.Trimesh(vertices=corners, faces=np.arange(len(corners)).reshape(-1, 3), process=False)
+    out.visual = trimesh.visual.TextureVisuals(uv=np.column_stack([u, v]) / max(tile_mm, 0.1))
+    return out
+
+
+def textured(mesh: trimesh.Trimesh, name: str, color: str, look: dict, parts_dir: Path | None, kind: str = "part"):
+    """A mesh with its material: a tiled texture when look names one, else a plain colour and finish."""
+    spec = material_library(parts_dir / "materials").get(look.get("material", "")) if parts_dir else None
+    texture = material_texture(parts_dir / "materials", look["material"]) if spec else None
+    if texture is not None:
+        mesh = box_uv(mesh, float(spec.get("tile_mm", 50)))
+        mesh.visual.material = trimesh.visual.material.PBRMaterial(
+            name=name,
+            baseColorTexture=texture,
+            baseColorFactor=hex_to_rgba(color),  # the texture is greyscale detail; the colour tints it
+            metallicFactor=float(look.get("metallic", spec.get("metallic", 0.0))),
+            roughnessFactor=float(look.get("roughness", spec.get("roughness", 0.6))),
+        )
+        return mesh
+    mesh.visual = trimesh.visual.TextureVisuals(
+        material=trimesh.visual.material.PBRMaterial(
+            name=name,
+            baseColorFactor=hex_to_rgba(color),
+            metallicFactor=float(look.get("metallic", 0.6 if kind == "fastener" else 0.0)),
+            roughnessFactor=float(look.get("roughness", 0.6)),
+        )
+    )
+    return mesh
+
+
+def accent_meshes(part: dict, parts_dir: Path | None) -> list[tuple[trimesh.Trimesh, str, dict]]:
+    """A part's accents: extra pieces in another material (a carriage's black end caps, a motor's can),
+    each a STEP file next to the part's JSON: appearance.accents = [{step_file, material, color?}]."""
+    out = []
+    for i, accent in enumerate((part.get("appearance") or {}).get("accents") or []):
+        path = parts_dir / accent.get("step_file", "") if parts_dir else None
+        if not path or not path.is_file():
+            continue
+        spec = material_library(parts_dir / "materials").get(accent.get("material", ""), {})
+        out.append((accent_mesh(path), accent.get("color") or spec.get("color", "#888888"), accent))
+    return out
+
+
+@functools.lru_cache(maxsize=64)
+def accent_mesh(path: Path) -> trimesh.Trimesh:
+    from build123d import import_step
+
+    from .geometry import mesh_of
+
+    return mesh_of(import_step(path))
+
+
+def top_face(piece, part: dict, parts_dir: Path) -> trimesh.Trimesh | None:
+    """A quad just above the body's top face, textured with the part's top picture (textures.py)."""
+    image = top_image(part, parts_dir)
+    if image is None:
+        return None
+    sx, sy, sz = (float(v) for v in part["body"]["size"])
+    z = sz + 0.03  # just above the body so it never z-fights
+    quad = trimesh.Trimesh(
+        vertices=[[0, 0, z], [sx, 0, z], [sx, sy, z], [0, sy, z]], faces=[[0, 1, 2], [0, 2, 3]], process=False
+    )
+    quad.visual = trimesh.visual.TextureVisuals(
+        uv=[[0, 0], [1, 0], [1, 1], [0, 1]],
+        material=trimesh.visual.material.PBRMaterial(
+            name=f"{piece.id}-top", baseColorTexture=image, metallicFactor=0.0, roughnessFactor=0.55
+        ),
+    )
+    return quad
+
+
+def write_glb(built: BuiltDesign, path: Path, parts: dict[str, dict] | None = None, parts_dir: Path | None = None,
+              only: set[str] | None = None, suffix: str = "") -> None:
+    """parts (library entries by id) adds each part's appearance: metal finish and top picture. only: just
+    these piece ids (a build page step model); suffix: added to node names (the build page looks for
+    "<id>__mesh")."""
     scene = trimesh.Scene(base_frame="world")
     scene.graph.update(frame_from="world", frame_to="design", matrix=DESIGN_TO_GLTF)
     for piece in built.pieces.values():
-        mesh = piece.local_mesh().copy()
-        mesh.visual = trimesh.visual.TextureVisuals(
-            material=trimesh.visual.material.PBRMaterial(
-                name=piece.id,
-                baseColorFactor=hex_to_rgba(piece.color),
-                metallicFactor=0.6 if piece.kind == "fastener" else 0.0,
-                roughnessFactor=0.6,
-            )
-        )
+        if only is not None and piece.id not in only:
+            continue
+        part = (parts or {}).get(piece.part_id) or {}
+        look = part.get("appearance") or {}
+        mesh = textured(piece.local_mesh().copy(), piece.id, piece.color, look, parts_dir, piece.kind)
         scene.add_geometry(
             mesh,
-            node_name=piece.id,
-            geom_name=piece.id,
+            node_name=piece.id + suffix,
+            geom_name=piece.id + suffix,
             parent_node_name="design",
             transform=piece.matrix,
         )
+        for i, (accent, color, accent_look) in enumerate(accent_meshes(part, parts_dir) if piece.kind == "part" else []):
+            name = f"{piece.id}{suffix}-accent-{i}"  # a child, so clicking it still picks the part
+            scene.add_geometry(textured(accent.copy(), name, color, accent_look, parts_dir), node_name=name, geom_name=name,
+                               parent_node_name=piece.id + suffix)
+        quad = top_face(piece, part, parts_dir) if parts_dir and piece.kind == "part" else None
+        if quad is not None:
+            scene.add_geometry(quad, node_name=f"{piece.id}{suffix}-top", geom_name=f"{piece.id}{suffix}-top", parent_node_name=piece.id + suffix)
     path.write_bytes(scene.export(file_type="glb"))
 
 
@@ -114,12 +225,48 @@ def default_steps(design: Design, built: BuiltDesign) -> list[Step]:
     return steps
 
 
+PLA_DENSITY = 1.24  # g/cm3
+GRAMS_PER_HOUR = 12.0  # rough rate for a 0.4 mm nozzle at default speeds; shown as an estimate
+
+
+def print_info(built: BuiltDesign, name: str, formats: list[str]) -> dict | None:
+    """Size, filament and time estimates for the printed pieces, for the Print screen."""
+    if built.outer is None:
+        return None
+    pieces = []
+    for pid in ("base", "lid"):
+        piece = built.pieces.get(pid)
+        if piece is None:
+            continue
+        volume = float(piece.shape.volume)  # mm3; thin walls print close to solid
+        grams = volume / 1000 * PLA_DENSITY
+        pieces.append(
+            {
+                "id": pid,
+                "name": piece.name,
+                "file": f"{name}-{pid}.stl" if "stl" in formats else None,
+                "volume_mm3": round(volume),
+                "grams": round(grams, 1),
+                "minutes": round(grams / GRAMS_PER_HOUR * 60),
+            }
+        )
+    size = (built.outer[1] - built.outer[0]).round(1).tolist()
+    return {
+        "size_mm": size,
+        "material": "PLA",
+        "pieces": pieces,
+        "total_grams": round(sum(p["grams"] for p in pieces), 1),
+        "total_minutes": sum(p["minutes"] for p in pieces),
+        "step_file": f"{name}.step" if "step" in formats else None,
+    }
+
+
 def parts_category(built: BuiltDesign, pid: str) -> str | None:
     piece = built.pieces.get(pid)
     return piece.category if piece else None
 
 
-def steps_document(design: Design, built: BuiltDesign, model_name: str) -> dict:
+def steps_document(design: Design, built: BuiltDesign, model_name: str, printing: dict | None = None) -> dict:
     steps = design.steps or default_steps(design, built)
     added = [pid for s in steps for pid in s.add]
     missing = [pid for pid in built.pieces if pid not in added]
@@ -149,6 +296,10 @@ def steps_document(design: Design, built: BuiltDesign, model_name: str) -> dict:
                 entry[key] = getattr(s, key)
         if s.check:
             entry["check"] = s.check
+        if s.section:
+            entry["section"] = s.section
+        if s.why:
+            entry["why"] = s.why
         doc_steps.append(entry)
     doc = {
         "format": "physical-studio-steps",
@@ -162,17 +313,206 @@ def steps_document(design: Design, built: BuiltDesign, model_name: str) -> dict:
     }
     if design.prompt:
         doc["prompt"] = design.prompt
+    if printing:
+        doc["print"] = printing
     return doc
 
 
-def export_design(design: Design, built: BuiltDesign, out_dir: Path, formats: list[str], name: str = "design") -> dict:
+# Angles a step picture may use. iso unless another one shows the new part clearly better (a pinion under
+# the cart, a sensor on the back of an arm).
+PICTURE_VIEWS = ("iso", "iso_right", "iso_back", "iso_left_back", "below")
+
+
+def best_view(built: BuiltDesign, visible: set[str], new: set[str]) -> str:
+    seen = {}
+    for view in PICTURE_VIEWS:
+        stats: dict = {}
+        render(built, view, visible, None, new, size=(200, 150), labels=False, stats=stats)
+        seen[view] = stats["highlight_px"]
+    best = max(seen, key=seen.get)
+    return best if seen[best] > 1.5 * seen["iso"] + 20 else "iso"
+
+
+def top_textures(built: BuiltDesign, parts: dict[str, dict], parts_dir: Path) -> dict:
+    """Piece id -> its textured top quad (top_face), for render's textures."""
+    out = {}
+    for piece in built.pieces.values():
+        part = parts.get(piece.part_id) or {}
+        quad = top_face(piece, part, parts_dir) if piece.kind == "part" and part.get("body") else None
+        if quad is not None:
+            out[piece.id] = quad
+    return out
+
+
+def extent(built: BuiltDesign, ids: set[str]) -> float:
+    """The largest side of the box around these pieces, mm."""
+    pts = []
+    for pid in ids:
+        piece = built.pieces[pid]
+        b = piece.local_mesh(tolerance=0.5, angular=1.0).bounds
+        corners = np.array([[x, y, z] for x in b[:, 0] for y in b[:, 1] for z in b[:, 2]])
+        pts.append(corners @ piece.matrix[:3, :3].T + piece.matrix[:3, 3])
+    pts = np.concatenate(pts)
+    return float((pts.max(axis=0) - pts.min(axis=0)).max())
+
+
+def close_up(built: BuiltDesign, visible: set[str], new: set[str]) -> set[str] | None:
+    """What a step picture should zoom in on, or None to show the whole build: when the new parts are
+    small next to the build (wires on a half-metre machine, a sensor, a pinion), frame them together
+    with the parts their wires plug into."""
+    if not new or len(visible) <= len(new):
+        return None
+    focus = set(new)
+    for pid in new:
+        piece = built.pieces[pid]
+        if piece.kind == "wire":
+            focus |= {piece.extra["from"]["placement"], piece.extra["to"]["placement"]} & visible
+    return focus if extent(built, focus) < 0.45 * extent(built, visible) else None
+
+
+# --- step motion: how this step's parts go in, as a few pictures with the final picture's camera -----
+
+MOTION_FRAMES = 4  # pictures of the parts on their way in; the step picture itself is the last frame
+SCREW_TURN = 40.0  # degrees a screw turns between two frames (not a multiple of the head cross's 90)
+AXIAL = re.compile(r"bearing|shaft|rod|axle|pin\b|dowel|pulley|idler|coupler|pinion|wheel|magnet|leadscrew|bushing|spacer", re.I)
+
+
+def local_box(piece) -> tuple[np.ndarray, np.ndarray]:
+    lo, hi = piece.local_mesh(tolerance=0.5, angular=1.0).bounds
+    return np.asarray(lo, dtype=float), np.asarray(hi, dtype=float)
+
+
+def round_axis(size: np.ndarray) -> int:
+    """The local axis a round part (bearing, shaft, pulley) turns about: the one whose two cross
+    dimensions are the most alike."""
+    return int(np.argmin([abs(size[(k + 1) % 3] - size[(k + 2) % 3]) / max(size.max(), 1e-6) for k in range(3)]))
+
+
+def insertion(built: BuiltDesign, pid: str, view: str, reach: float, motion: dict | None = None) -> tuple[np.ndarray, bool]:
+    """Where a new piece starts before it goes in (an offset in mm, design frame) and whether it turns on
+    the way (a screw). Screws come down their own axis from above their hole; bearings, shafts and pins
+    slide along their axis from the side facing the camera; anything else comes down from above, unless
+    the step's motion says otherwise. Never further than `reach`, so it starts inside the picture."""
+    piece = built.pieces[pid]
+    lo, hi = local_box(piece)
+    size = hi - lo
+    turns = piece.kind == "fastener"
+    if motion and motion.get("from_offset"):
+        offset = np.asarray(motion["from_offset"], dtype=float)
+    elif turns:
+        offset = piece.matrix[:3, 2] * max(8.0, 1.5 * size[2])  # head up along +z, shaft down along -z
+    else:
+        rot = piece.matrix[:3, :3]
+        if AXIAL.search(f"{piece.part_id or ''} {piece.name}"):
+            k = round_axis(size)
+            axis = rot[:, k]
+            back = -camera_basis(view)[2]
+            axis = axis if axis @ (back + np.array([0, 0, 0.5])) >= 0 else -axis
+            along = size[k]
+        else:
+            axis = np.array([0.0, 0.0, 1.0])
+            along = float(np.abs(rot @ size)[2])
+        offset = axis * max(10.0, 1.2 * along)
+    length = float(np.linalg.norm(offset))
+    if length > reach > 0:
+        offset = offset * (reach / length)
+    return offset, turns
+
+
+def motion_frames(built: BuiltDesign, entry: dict, visible: set[str], lit: set[str], view: str, camera: tuple, size: tuple[int, int]) -> list[dict]:
+    """The step's motion as render arguments, one per frame: MOTION_FRAMES pictures of its new parts on
+    their way in (easing into place, screws turning), then, when the step adds wires, one with every part
+    seated and the new wires still out, so the page can draw them end to end. Earlier parts stay put, the
+    camera is the final picture's. Empty when nothing in the step moves."""
+    wires = {pid for pid in lit if built.pieces[pid].kind == "wire"}
+    moving = sorted(lit - wires)
+    reach = 0.3 * min(size) * SUPERSAMPLE / camera[2]  # mm: 30 % of the picture (render's scale is per supersampled px)
+    steps = {m.get("placement"): m for m in entry.get("motion", []) if isinstance(m, dict)}
+    paths = {pid: insertion(built, pid, view, reach, steps.get(pid)) for pid in moving}
+    shown = visible - wires
+    frames = []
+    for k in range(MOTION_FRAMES if moving else 0):
+        left = (1 - k / MOTION_FRAMES) ** 2  # the share of the way still to go: big moves first, easing in
+        frames.append({"visible": shown, "offsets": {pid: off * left for pid, (off, _) in paths.items()},
+                       "turns": {pid: SCREW_TURN * (MOTION_FRAMES - k) for pid, (_, turns) in paths.items() if turns}})
+    if wires and shown:
+        frames.append({"visible": shown, "offsets": {}, "turns": {}})
+    return frames
+
+
+def write_sprite(pictures: list[bytes], path: Path) -> None:
+    """The frames side by side in one small PNG (a 256-colour palette: the renders are flat shaded)."""
+    from PIL import Image
+
+    images = [Image.open(io.BytesIO(p)).convert("RGB") for p in pictures]
+    w, h = images[0].size
+    sheet = Image.new("RGB", (w * len(images), h))
+    for k, img in enumerate(images):
+        sheet.paste(img, (k * w, 0))
+    sheet.quantize(256, dither=Image.Dither.NONE).save(path, optimize=True)
+
+
+def step_pictures(built: BuiltDesign, doc: dict, out_dir: Path, textures: dict | None = None, motion: bool = False) -> list[str]:
+    """step-01.png, step-02.png, ...: what the build looks like after each step, its new parts highlighted
+    (the lid left off until the step that adds it), from the angle that shows the new parts best. Photo
+    checks show the AI this as the correct result. Each entry also gets picture_wires: every wire in the
+    picture as a line in fractions of the picture's width and height, so the page can make wires clickable,
+    and with motion (the build page's guides), picture_frames: the step's motion (step-01-motion.png,
+    motion_frames side by side, same camera)."""
+    written, shown = [], set()
+    size = (640, 480)
+    for i, entry in enumerate(doc["steps"], start=1):
+        new = set(entry.get("add", []))
+        shown |= new
+        visible = (shown if "lid" in new else shown - {"lid"}) & set(built.pieces)
+        lit = new & visible
+        view = best_view(built, visible, lit) if lit and len(visible) > 1 else "iso"
+        path = out_dir / f"step-{i:02d}.png"
+        stats: dict = {}
+        focus = close_up(built, visible, lit)
+        screws = {pid: 0.0 for pid in visible if built.pieces[pid].kind == "fastener"}
+        path.write_bytes(render(built, view, visible, None, lit, size=size, labels=False, stats=stats, textures=textures, focus=focus, turns=screws))
+        entry["picture"] = path.name
+        entry["picture_view"] = view
+        entry["picture_close_up"] = focus is not None
+        entry["picture_wires"] = [{"id": wid, "points": [[round(x / size[0], 4), round(y / size[1], 4)] for x, y in pts]}
+                                  for wid, pts in stats["wires"].items()]
+        written.append(str(path))
+        frames = motion_frames(built, entry, visible, lit, view, stats["camera"], size) if motion else []
+        if frames:
+            sprite = out_dir / f"step-{i:02d}-motion.png"
+            write_sprite([render(built, view, f["visible"], f["offsets"], lit, size=size, labels=False, textures=textures,
+                                 camera=stats["camera"], turns={**screws, **f["turns"]}) for f in frames], sprite)
+            entry["picture_frames"] = {"file": sprite.name, "count": len(frames),
+                                       "seated": any(built.pieces[pid].kind == "wire" for pid in lit)}
+            written.append(str(sprite))
+    return written
+
+
+def export_design(
+    design: Design,
+    built: BuiltDesign,
+    out_dir: Path,
+    formats: list[str],
+    name: str = "design",
+    parts: dict[str, dict] | None = None,
+    parts_dir: Path | None = None,
+) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[str] = []
     if "glb" in formats:
         glb = out_dir / f"{name}.glb"
-        write_glb(built, glb)
+        write_glb(built, glb, parts, parts_dir)
+        # Thumbnail for the projects list on screen 1: the finished design, no labels.
+        thumb = out_dir / f"{name}.png"
+        textures = top_textures(built, parts, parts_dir) if parts and parts_dir else None
+        thumb.write_bytes(render(built, "iso", size=(480, 360), labels=False, textures=textures))
+        written.append(str(thumb))
         steps_path = out_dir / f"{name}.steps.json"
-        steps_path.write_text(json.dumps(steps_document(design, built, glb.name), indent=2) + "\n")
+        printing = print_info(built, name, formats)
+        doc = steps_document(design, built, glb.name, printing)
+        written += step_pictures(built, doc, out_dir, textures)
+        steps_path.write_text(json.dumps(doc, indent=2) + "\n")
         written += [str(glb), str(steps_path)]
     if "stl" in formats:
         # Only the printed pieces; library parts are bought, not printed.

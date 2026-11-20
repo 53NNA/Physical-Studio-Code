@@ -1,0 +1,210 @@
+{
+  "id": "teensy-41",
+  "name": "Teensy 4.1",
+  "category": "board",
+  "source": "Typical datasheet/standard numbers for this part; the shop listing wasn't checked and it is not yet measured",
+  "step_file": null,
+  "body": {
+    "size": [
+      60.96,
+      17.78,
+      1.6
+    ]
+  },
+  "envelope": {
+    "min": [
+      0,
+      0,
+      0
+    ],
+    "max": [
+      60.96,
+      17.78,
+      4
+    ]
+  },
+  "connectors": [
+    {
+      "id": "usb",
+      "type": "micro-usb",
+      "face": "-x",
+      "center": [
+        0,
+        8.89,
+        2.6
+      ],
+      "size": [
+        8,
+        3
+      ],
+      "protrusion": 1
+    }
+  ],
+  "pins": [
+    {
+      "id": "vin",
+      "label": "VIN",
+      "position": [
+        1.27,
+        16.51,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "gnd2",
+      "label": "GND",
+      "position": [
+        3.81,
+        16.51,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "3v3",
+      "label": "3.3V",
+      "position": [
+        6.35,
+        16.51,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "d19",
+      "label": "19 / SCL",
+      "position": [
+        19.05,
+        16.51,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "d18",
+      "label": "18 / SDA",
+      "position": [
+        21.59,
+        16.51,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "d17",
+      "label": "17 / SDA1",
+      "position": [
+        24.13,
+        16.51,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "d16",
+      "label": "16 / SCL1",
+      "position": [
+        26.669999999999998,
+        16.51,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "gnd",
+      "label": "GND",
+      "position": [
+        1.27,
+        1.27,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "d2",
+      "label": "2 (PWM)",
+      "position": [
+        8.89,
+        1.27,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "d3",
+      "label": "3 (PWM)",
+      "position": [
+        11.43,
+        1.27,
+        1.6
+      ],
+      "direction": [
+        0,
+        0,
+        1
+      ]
+    }
+  ],
+  "appearance": {
+    "color": "#1d6b3a",
+    "roughness": 0.5,
+    "top": {
+      "image": "teensy-41.top.jpg"
+    },
+    "source": "https://www.pjrc.com/store/teensy41.html (photo teensy41_4.jpg)",
+    "material": "pcb"
+  },
+  "notes": "600 MHz Cortex-M7, 3 I2C buses (Wire 18/19, Wire1 17/16). Powered over USB here; its pins are 3.3 V only. VIN takes 3.6 to 5.5 V.",
+  "verified": false,
+  "verified_by": null,
+  "verified_on": null,
+  "electrical": {
+    "logic_v": 3.3,
+    "pin_ma": 4,
+    "pin_abs_ma": 10,
+    "total_pin_ma": 100,
+    "rails_ma": {
+      "5v": 450,
+      "3v3": 250
+    },
+    "five_v_tolerant": false,
+    "source": "Typical datasheet numbers; not yet measured"
+  }
+}

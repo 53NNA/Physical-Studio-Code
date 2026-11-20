@@ -1,0 +1,95 @@
+## Design guide: clean designs and guides a beginner can follow
+
+These rules apply to every model that drives the Physical Studio tools (OpenAI, DeepSeek, Gemini,
+Claude, or any MCP client).
+
+### Parts and colors
+- Every number comes from get_part. Never take a size from an image, a web page or memory.
+- Set `color` on place_part to match the prompt: a traffic light's LEDs are red, yellow and green
+  from top to bottom, and an LED next to a button matches it. If the prompt doesn't say, leave it out.
+- Name parts the way a beginner would say them: "Red button", "Green LED", "Buzzer", "Arduino Uno".
+  Give each copy of a part its own name. Never use an id like `led-5mm-2` as a name.
+
+### Real looks
+- If you can't browse the web, call find_part_looks once with every placed part that has no
+  `appearance` in get_part; the server looks them up. Otherwise do it yourself:
+- Before exporting, look up each part you placed (manufacturer page first, then a shop listing) and
+  call set_part_look with what the real part looks like: the PCB's solder-mask color, the metal's
+  finish (bare steel about metallic 0.9 / roughness 0.3; a PCB metallic 0 / roughness 0.5) and,
+  for boards, top_image_url: the image file of a straight-on top view. Pass the page in `source`.
+- Skip a part you can't identify for sure (an unbranded motor); its library look stays. Parts that
+  already have a library look (get_part's `appearance`) only need a call if the real one differs.
+- Sizes still come from get_part only: a photo never changes a dimension.
+
+### Layout
+- Put the main board at the origin first, then everything else around it.
+- Parts that poke through the lid (buttons, LEDs) sit in the lid, not floating above the board.
+  Line their lid mounts up at the same height (create_enclosure says how far to raise any that are
+  low), and keep them clear of the board's tall parts.
+- Keep ports a cable plugs into (USB, barrel jack) against a wall so they get a cutout.
+
+### Mechanism builds (motors, rails, gears, arms, frames)
+- No case unless the request asks for one. A base plate or frame part is the first placement.
+- Build it in the order hands really do it: rail on the base, carriage on the rail, plate on the
+  carriage, motor on the plate, gear on the motor shaft, then bearings, shafts and arms, then
+  sensors on their mounts, then the boards on the base, then wiring with power last.
+- Parts that must line up (a pinion meshing a rack, a magnet centred under an encoder chip, a shaft
+  through two bearings) get a callout and a check line about exactly that.
+- Leave cable slack for anything that moves, and say so in the wiring step.
+- The power supply stays unplugged until the last wire is in; the last wiring step's check says so.
+- Stepper builds: driver current limit set before the motor runs, a 100 uF capacitor across the
+  driver's motor supply, limit switches at the ends of each axis (COM to GND, NO to an input).
+
+Good mechanism steps look like this (from the double inverted pendulum guide):
+```
+add_step(title="Slide on the carriage block", text="Slide the carriage block onto the rail from one end. Keep it level so the balls stay in.",
+         add=["block"], motion=[{"placement": "block", "from_offset": [-260, 0, 0]}],
+         callouts=[{"text": "Keep it level", "target": "block"}],
+         check="The block sits on the rail and slides end to end smoothly.")
+add_step(title="Fit the pinion gear", text="From underneath, push the pinion onto the motor shaft so it meshes with the rack, then tighten its set screw.",
+         add=["pinion"], motion=[{"placement": "pinion", "from_offset": [0, 0, -30]}],
+         tools=[{"name": "2 mm hex key", "for": "the pinion's set screw"}],
+         callouts=[{"text": "Teeth in the rack", "target": "pinion"}],
+         check="The pinion is on the motor shaft under the cart and its teeth sit in the rack.")
+add_step(title="Wire the motor", text="Connect the motor to the driver. Leave slack so the cart can travel.\nDrive motor M+ → Motor driver OUT1 (orange wire)\nDrive motor M- → Motor driver OUT2 (brown wire)",
+         add=["w-motor-1", "w-motor-2"], callouts=[{"text": "Leave slack", "target": "w-motor-1"}],
+         check="Orange and brown wires run from the motor to OUT1 and OUT2.")
+add_step(title="Wire the cart encoder", text="Connect the cart encoder.\nCart encoder VCC → 3.3 V regulator OUT+ 3.3 V (red wire)\nCart encoder GND → 3.3 V regulator OUT- (black wire)\nCart encoder SDA → Teensy 4.1 pin 18 / SDA (green wire)\nCart encoder SCL → Teensy 4.1 pin 19 / SCL (yellow wire)\nCart encoder DIR → GND on the same board (black wire)",
+         add=["w-enc-3v3", "w-enc-gnd", "w-enc-sda", "w-enc-scl", "w-enc-dir"],
+         check="Five wires leave the cart encoder: red, black, green to pin 18, yellow to pin 19, and a black loop from DIR to GND.")
+```
+
+### The check-and-fix loop
+- After every placement change: check_interference, check_clearance, then render_preview twice:
+  `iso` with the lid hidden (`hide: ["lid"]`) and `top`. Look at both pictures.
+- Fix what they show with move_part (a board's screws move with it) or remove_part (for example a
+  screw whose head hits a component), then run the checks and previews again.
+- Stop only when check_interference is clean, check_clearance has no blocking problems, and the
+  previews show nothing floating, overlapping or poking out of the case.
+
+### The assembly guide (add_step)
+- Case builds: base, board, screws, then the lid parts, then wiring, then close the lid.
+- Every step that adds a part has motion (from_offset, e.g. [0, 0, 40] to drop it in from above), so
+  the viewer animates it into place. Every screw, set screw, press-fit or glue step names its tool.
+- Lid-mounted parts go in with the lid: turn the lid upside down, press the buttons and LEDs into it,
+  then wire them. Don't show them hanging in the base.
+- One step per part. Wiring gets its own steps, a few wires each, grouped by part ("Wire the red
+  button").
+- A wiring step never just says "wire the encoder". Its text is one short sentence, then every
+  connection pin to pin on its own line, with the labels printed on the boards (the `label` from
+  get_part, not the pin id) and the wire colour: `Cart encoder SDA → Teensy 4.1 pin 18 / SDA (green wire)`.
+  One connection per line, the part being wired first. (The build page rewrites these lines from
+  the design's add_wire calls, so wire every connection you name.)
+- Each step's text is one or two short sentences in plain words. Name the tool if one is needed.
+- Every step fits a real part for good. No "stage the motor beside the frame", "not attached",
+  "layout only" or "drill a hole for the button" steps: search_parts for the bracket, mount or
+  lid_mount part that does the job, and if the library has none, leave that part out of the steps and
+  say what's missing in your final message. check_guide flags placeholder steps.
+- Each step's check line is something a camera can see: "The red button sits in the top-left hole of
+  the lid", not "The circuit works".
+- Builds over about 12 steps: give every step a `section` ("Frame", "Cart and drive motor", "Wiring"), 3 to 8
+  steps each, so the build page can fold the list.
+- Call check_guide before export and fix everything under `problems`. It also checks the wiring from
+  the boards' printed labels: a supply wired to ground, two different voltages on one wire, a supply
+  pin outside the range its part's notes give (Teensy 4.1 VIN 3.6 to 5.5 V), 5 V on a 3.3 V only part,
+  and two fixed-address I2C devices on one SDA line (give each its own bus).

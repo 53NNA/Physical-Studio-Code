@@ -4,6 +4,49 @@
 {$DOMAIN} {
 	encode zstd gzip
 
+	# The front page of the hosts in FRONT_HOSTS (deploy/front.sh) opens Circuit Studio's Build
+	# helper; everything else on them (/guide, /api, /studio, assets) stays the viewer app's.
+	@front {
+		path /
+		host {$FRONT_HOSTS}
+	}
+	redir @front /studio/
+
+	# Web app backend in the MCP server: parts list and Claude design jobs (screens 1 and 2).
+	handle /api/parts {
+		reverse_proxy mcp:8000
+	}
+	handle /api/design* {
+		reverse_proxy mcp:8000
+	}
+	# Breadboard builds from bench photos (mcp-server/physical_studio/bench/).
+	handle /api/build* {
+		reverse_proxy mcp:8000
+	}
+	# Accounts, saved projects and BOM uploads (users.py, boms.py).
+	handle /api/auth/* {
+		reverse_proxy mcp:8000
+	}
+	handle /api/projects* {
+		reverse_proxy mcp:8000
+	}
+	handle /api/bom* {
+		reverse_proxy mcp:8000
+	}
+	# Personal keys for visitors' own AI, and the guides each key exported (accounts.py).
+	handle /api/connect {
+		reverse_proxy mcp:8000
+	}
+	handle /api/my-projects {
+		reverse_proxy mcp:8000
+	}
+
+	# Circuit Studio (Streamlit). It needs websockets, which reverse_proxy passes through.
+	redir /studio /studio/
+	handle /studio/* {
+		reverse_proxy studio:8501
+	}
+
 	handle /mcp* {
 		reverse_proxy mcp:8000 {
 			flush_interval -1 # MCP streams responses

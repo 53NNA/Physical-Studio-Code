@@ -1,0 +1,129 @@
+{
+  "id": "vl53l0x-board",
+  "name": "VL53L0X distance sensor board",
+  "category": "input",
+  "source": "Typical datasheet/standard numbers for this part; the shop listing wasn't checked and it is not yet measured",
+  "step_file": null,
+  "body": {
+    "size": [
+      10.7,
+      25,
+      2.5
+    ]
+  },
+  "pins": [
+    {
+      "id": "vin",
+      "label": "VIN",
+      "position": [
+        1.27,
+        2.5,
+        0
+      ],
+      "direction": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "id": "gnd",
+      "label": "GND",
+      "position": [
+        1.27,
+        5.04,
+        0
+      ],
+      "direction": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "id": "scl",
+      "label": "SCL",
+      "position": [
+        1.27,
+        7.58,
+        0
+      ],
+      "direction": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "id": "sda",
+      "label": "SDA",
+      "position": [
+        1.27,
+        10.120000000000001,
+        0
+      ],
+      "direction": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "id": "xshut",
+      "label": "XSHUT",
+      "position": [
+        1.27,
+        12.66,
+        0
+      ],
+      "direction": [
+        0,
+        0,
+        -1
+      ]
+    }
+  ],
+  "appearance": {
+    "color": "#5a2d82",
+    "roughness": 0.5,
+    "top": {
+      "pcb": {
+        "mask": "#5a2d82",
+        "title": "GY-530",
+        "title_at": [
+          6.5,
+          19
+        ],
+        "chips": [
+          {
+            "at": [
+              6.5,
+              22
+            ],
+            "size": [
+              4.4,
+              2.4
+            ],
+            "label": ""
+          }
+        ]
+      }
+    },
+    "source": "https://st.robu.in/product/unsoldered-purple-gy-530-vl53l0x-time-of-flight-tof-laser-ranging-sensor-module",
+    "material": "pcb"
+  },
+  "notes": "Time-of-flight distance sensor, up to about 1.2 m, I2C address 0x29. Faces the carriage to measure where the cart is.",
+  "verified": false,
+  "verified_by": null,
+  "verified_on": null,
+  "electrical": {
+    "supply_v": [
+      2.6,
+      5.5
+    ],
+    "current_ma": 19,
+    "peak_ma": 40,
+    "signal_v": 3.3,
+    "source": "Typical datasheet numbers; not yet measured"
+  }
+}

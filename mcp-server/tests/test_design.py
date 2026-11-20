@@ -167,3 +167,119 @@ def test_wires_route_between_pins_and_export(studio, tmp_path):
     assert wire["inline"] == "220 ohm resistor"
     assert any(s["title"] == "Wire the Test LED" for s in steps["steps"])
     assert studio.render_preview("iso", hide=["lid"])[:4] == b"\x89PNG"
+
+
+BUTTON = {
+    "id": "test-button",
+    "name": "Test button",
+    "category": "input",
+    "source": "test fixture (12x12 tactile, 3.5 mm housing + plunger to 7.3 mm)",
+    "step_file": None,
+    "body": {"size": [12.0, 12.0, 7.3]},
+    "envelope": {"min": [-0.5, 0.0, -3.5], "max": [12.5, 12.0, 7.3]},
+    "lid_mount": {"z": 3.5},
+    "connectors": [{"id": "plunger", "face": "+z", "center": [6.0, 6.0, 7.3], "size": [7.0, 7.0], "protrusion": 0.0}],
+    "verified": False,
+}
+
+
+def test_lid_mounted_parts_poke_through_the_lid(studio):
+    (studio.parts_dir / "test-button.json").write_text(json.dumps(BUTTON))
+    studio.place_part("test-button", (20, 20, 20), id="btn-hi")
+    studio.place_part("test-button", (40, 20, 18), id="btn-lo")  # 2 mm too low
+    info = studio.create_enclosure()
+    assert info["cavity"]["max"][2] == 23.5  # lid underside at btn-hi's housing top (20 + 3.5)
+    assert any(w.startswith("btn-lo") and "z + 2.00" in w for w in info["warnings"])
+    studio.place_part("test-button", (40, 20, 20), id="btn-ok")
+    studio.design.placements.pop("btn-lo")
+    assert studio.check_interference()["ok"]
+    assert studio.check_clearance()["ok"]
+    built = studio.build()
+    lid = built.pieces["lid"].shape
+    plunger_in_lid = Vector(26, 26, 24.5)  # inside the 2 mm lid, over btn-hi's plunger
+    assert not lid.is_inside(plunger_in_lid)  # the opening is cut
+    assert lid.is_inside(Vector(20.5, 20.5, 24.5))  # the housing's corner stays under solid lid
+    assert built.cavity[1][2] + 2.0 < 20 + 7.3 + 0.01  # plunger top (27.3) reaches above the lid top (25.5)
+
+
+def test_connector_clearance_overrides_the_cutout_clearance(studio):
+    tight = json.loads(json.dumps(BUTTON))
+    tight["id"] = "test-button-tight"
+    tight["connectors"][0]["clearance"] = 0.1
+    (studio.parts_dir / "test-button.json").write_text(json.dumps(BUTTON))
+    (studio.parts_dir / "test-button-tight.json").write_text(json.dumps(tight))
+    studio.place_part("test-button", (20, 20, 20), id="btn")
+    studio.place_part("test-button-tight", (50, 20, 20), id="btn-tight")
+    studio.create_enclosure()
+    lid = studio.build().pieces["lid"].shape
+    # Plungers are 7 mm wide: the default 0.5 mm per side opens to 8 mm, 0.1 mm to 7.2 mm.
+    assert not lid.is_inside(Vector(26 + 3.8, 26, 24.5))
+    assert lid.is_inside(Vector(56 + 3.8, 26, 24.5))
+
+
+def test_move_part_takes_its_screws_and_remove_part_cleans_up(studio):
+    shutil.copy(REPO / "parts" / "led-5mm.json", studio.parts_dir)
+    studio.place_part("led-5mm", (30, 20, 20), id="led")
+    studio.add_fastener("test-m3-screw", "uno", "h1", id="screw-h1")
+    studio.add_fastener("test-m3-screw", "uno", "h2", id="screw-h2")
+    studio.add_wire("led", "anode", "uno", "d8", id="w-led")
+    studio.add_step("Board", "Drop in the Uno.", ["uno", "screw-h1", "screw-h2"])
+    studio.add_step("LED", "Add the LED.", ["led", "w-led"])
+    before = studio.design.placements["screw-h1"].position
+    studio.move_part("uno", (5, 0, 0))
+    after = studio.design.placements["screw-h1"].position
+    assert after[0] == pytest.approx(before[0] + 5) and after[1:] == before[1:]
+    assert studio.remove_part("screw-h2") == {"removed": ["screw-h2"]}
+    assert studio.design.steps[0].add == ["uno", "screw-h1"]
+    assert studio.remove_part("led")["removed"] == ["led", "w-led"]
+    assert [s.title for s in studio.design.steps] == ["Board"]  # the LED step was left empty
+    with pytest.raises(ValueError, match="remove it and add it again"):
+        studio.move_part("screw-h1", (0, 0, 0))
+
+
+def test_place_part_color_reaches_the_build_and_steps(studio, tmp_path):
+    shutil.copy(REPO / "parts" / "led-5mm.json", studio.parts_dir)
+    studio.place_part("led-5mm", (30, 20, 30), id="led-blue", color="blue")
+    studio.place_part("led-5mm", (40, 20, 30), id="led-hex", color="#123abc")
+    studio.place_part("led-5mm", (50, 20, 30), id="led-default")
+    pieces = studio.build().pieces
+    assert pieces["led-blue"].color == "#3a6fd0"
+    assert pieces["led-hex"].color == "#123abc"
+    assert pieces["led-default"].color == "#d04040"  # output category default
+    with pytest.raises(ValueError, match="color must be"):
+        studio.place_part("led-5mm", (60, 20, 30), id="led-bad", color="sparkly")
+    out = tmp_path / "colored"
+    studio.export(["glb"], str(out))
+    doc = json.loads((out / "design.steps.json").read_text())
+    colors = {p["id"]: p["color"] for p in doc["placements"]}
+    assert colors["led-blue"] == "#3a6fd0"
+
+
+def test_render_draws_board_top_photos_and_keeps_big_designs_readable(studio):
+    import io
+
+    import numpy as np
+    import trimesh
+    from PIL import Image
+
+    from physical_studio.render import render
+
+    built = studio.build()
+    plain = np.asarray(Image.open(io.BytesIO(render(built, "top", labels=False, size=(320, 240)))).convert("RGB"), dtype=float)
+    # a striped "photo" on the board's top
+    sx, sy, sz = (float(v) for v in studio.library()["arduino-uno"]["body"]["size"])
+    quad = trimesh.Trimesh(vertices=[[0, 0, sz + 0.03], [sx, 0, sz + 0.03], [sx, sy, sz + 0.03], [0, sy, sz + 0.03]],
+                           faces=[[0, 1, 2], [0, 2, 3]], process=False)
+    stripes = np.zeros((32, 32, 3), dtype=np.uint8)
+    stripes[:, ::4] = 255
+    quad.visual = trimesh.visual.TextureVisuals(uv=[[0, 0], [1, 0], [1, 1], [0, 1]], material=trimesh.visual.material.PBRMaterial(baseColorTexture=Image.fromarray(stripes)))
+    stats: dict = {}
+    photo = np.asarray(Image.open(io.BytesIO(render(built, "top", labels=False, size=(320, 240), textures={"uno": quad}, stats=stats))).convert("RGB"), dtype=float)
+    assert photo.std() > plain.std() + 5  # the stripes show
+    assert stats["wires"] == {}
+
+    # half a metre wide: sloped faces must stay their colour, not turn into outline
+    studio.place_part("arduino-uno", (500, 0, 0), id="uno2")
+    big = np.asarray(Image.open(io.BytesIO(render(studio.build(), "iso", labels=False, size=(640, 480)))).convert("RGB"), dtype=float)
+    board = big[(np.abs(big - [236, 233, 228]).sum(axis=2) > 30)]
+    assert (np.abs(board - [40, 44, 52]).sum(axis=1) < 20).mean() < 0.5

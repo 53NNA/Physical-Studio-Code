@@ -1,0 +1,120 @@
+import asyncio
+import json
+import shutil
+from pathlib import Path
+
+import pytest
+from PIL import Image
+
+from physical_studio import looks
+from physical_studio.accounts import Accounts, KeyVerifier, key_hash
+from physical_studio.server import Studio
+
+REPO = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture
+def studio(tmp_path):
+    parts = tmp_path / "parts"
+    parts.mkdir()
+    shutil.copy(REPO / "parts" / "arduino-uno.json", parts)
+    s = Studio(parts, tmp_path / "out")
+    s.new_design("Look test")
+    s.place_part("arduino-uno", (0, 0, 0), id="uno")
+    return s
+
+
+def test_set_part_look_colours_the_part_and_textures_its_top(studio, monkeypatch, tmp_path):
+    photo = Image.new("RGB", (686, 534), "#0a5a8a")  # same aspect as the Uno's 68.6 x 53.4 top
+    monkeypatch.setattr("physical_studio.server.fetch_image", lambda url: photo)
+    out = studio.set_part_look("arduino-uno", color="#0a5a8a", roughness=0.5, top_image_url="https://example.com/uno.jpg")
+    assert out["appearance"]["color"] == "#0a5a8a" and "warning" not in out
+    assert studio.build().pieces["uno"].color == "#0a5a8a"
+    studio.export(["glb"], str(tmp_path / "x"))
+    glb = (tmp_path / "x" / "design.glb").read_bytes()
+    assert b"uno-top" in glb  # the textured top face is its own child node
+    assert (tmp_path / "x" / "design.png").exists()
+
+
+def test_set_part_look_warns_about_a_stretched_photo(studio, monkeypatch):
+    monkeypatch.setattr("physical_studio.server.fetch_image", lambda url: Image.new("RGB", (100, 400)))
+    assert "stretched" in studio.set_part_look("arduino-uno", top_image_url="https://example.com/a.jpg")["warning"]
+
+
+def test_new_design_forgets_looks(studio):
+    studio.set_part_look("arduino-uno", color="red")
+    studio.new_design("Next")
+    assert studio.looks == {}
+
+
+def test_trim_removes_a_plain_background():
+    img = Image.new("RGB", (200, 100), "white")
+    img.paste(Image.new("RGB", (120, 60), "green"), (40, 20))
+    assert looks.trim(img).size == (120, 60)
+
+
+@pytest.mark.parametrize("url", ["file:///etc/passwd", "http://127.0.0.1/a.png", "http://169.254.169.254/latest"])
+def test_fetch_refuses_local_addresses(url):
+    with pytest.raises(looks.LookError):
+        looks.fetch_image(url)
+
+
+def test_keys_are_stored_hashed_and_verified(tmp_path):
+    accounts = Accounts(tmp_path)
+    key = accounts.mint()
+    assert key.startswith("ps_") and accounts.known(key) and not accounts.known("ps_nope")
+    assert key not in (tmp_path / ".accounts" / "keys.json").read_text()
+    verifier = KeyVerifier("team-secret", accounts)
+    assert asyncio.run(verifier.verify_token(key)).client_id == f"key:{key_hash(key)[:12]}"
+    assert asyncio.run(verifier.verify_token("team-secret")).client_id == "team"
+    assert asyncio.run(verifier.verify_token("wrong")) is None
+
+
+def test_projects_are_recorded_per_owner(tmp_path):
+    accounts = Accounts(tmp_path)
+    accounts.record("abc", {"design": "out/a", "title": "A"})
+    accounts.record("abc", {"design": "out/b", "title": "B"})
+    accounts.record("abc", {"design": "out/a", "title": "A again"})
+    assert [p["title"] for p in accounts.projects("abc")] == ["A again", "B"]
+    assert accounts.projects("other") == []
+    json.loads((tmp_path / ".accounts" / "projects-abc.json").read_text())
+
+
+def test_find_part_looks_applies_what_the_search_found(studio, monkeypatch):
+    monkeypatch.setattr(
+        "physical_studio.server.find_look",
+        lambda part: {"color": "#11aa55", "metallic": 0.0, "roughness": 0.5, "top_image_url": "https://example.com/x.jpg", "source": "https://example.com"},
+    )
+    monkeypatch.setattr("physical_studio.server.fetch_image", lambda url: Image.new("RGB", (686, 534)))
+    out = studio.find_part_looks(["arduino-uno"])["looks"][0]
+    assert out["appearance"]["color"] == "#11aa55" and out["top_image"]
+
+
+def test_find_part_looks_keeps_the_colour_when_the_photo_fails(studio, monkeypatch):
+    monkeypatch.setattr("physical_studio.server.find_look", lambda part: {"color": "#11aa55", "top_image_url": "https://example.com/x.jpg"})
+
+    def broken(url):
+        raise looks.LookError("image download failed: HTTP 403")
+
+    monkeypatch.setattr("physical_studio.server.fetch_image", broken)
+    out = studio.find_part_looks(["arduino-uno"])["looks"][0]
+    assert out["appearance"]["color"] == "#11aa55" and "403" in out["photo_error"]
+
+
+def test_parse_look_drops_bad_fields():
+    look = looks.parse_look('Here: {"color": "green", "metallic": "2", "roughness": "x", "top_image_url": null, "source": "https://a.b"}')
+    assert look == {"metallic": 1.0, "source": "https://a.b"}
+
+
+def test_a_sideways_photo_is_turned_to_match_the_part(studio, monkeypatch):
+    monkeypatch.setattr("physical_studio.server.fetch_image", lambda url: Image.new("RGB", (534, 686)))
+    out = studio.set_part_look("arduino-uno", top_image_url="https://example.com/a.jpg")
+    assert out["top_image"]["pixels"] == [686, 534] and "warning" not in out
+
+
+def test_find_part_looks_drops_a_thumbnail(studio, monkeypatch):
+    monkeypatch.setattr("physical_studio.server.find_look", lambda part: {"color": "#11aa55", "top_image_url": "https://example.com/x.jpg"})
+    monkeypatch.setattr("physical_studio.server.fetch_image", lambda url: Image.new("RGB", (124, 96)))
+    out = studio.find_part_looks(["arduino-uno"])["looks"][0]
+    assert out["top_image"] is None and out["appearance"]["color"] == "#11aa55"
+    assert studio.looks["arduino-uno"]["image"] is None

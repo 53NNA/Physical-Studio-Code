@@ -3,6 +3,7 @@ import path from 'node:path'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { handleTokenRequest } from './server/geminiToken.js'
+import { geminiKeys } from './server/geminiKeys.js'
 import { handleCheckRequest } from './server/stepCheck.js'
 
 // Serves the MCP server's exports at /out/<design>/..., so `?design=out/<design>` shows
@@ -17,7 +18,8 @@ function serveExports(): Plugin {
         const file = path.join(OUT_DIR, decodeURIComponent((req.url ?? '/').split('?')[0]))
         if (!file.startsWith(OUT_DIR + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return next()
         res.setHeader('Cache-Control', 'no-store')
-        res.setHeader('Content-Type', file.endsWith('.json') ? 'application/json' : 'model/gltf-binary')
+        const types: Record<string, string> = { '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg' }
+        res.setHeader('Content-Type', types[path.extname(file)] ?? 'model/gltf-binary')
         fs.createReadStream(file).pipe(res)
       })
     },
@@ -28,23 +30,25 @@ function serveExports(): Plugin {
 // camera straight to Gemini without ever seeing GEMINI_API_KEY (read from viewer/.env.local).
 // Same handler as the production server (server.mjs).
 function geminiToken(env: Record<string, string>): Plugin {
+  const apiKeys = geminiKeys(env)
   return {
     name: 'gemini-token',
     configureServer(server) {
       server.middlewares.use('/api/gemini-token', (req, res) =>
         handleTokenRequest(req, res, {
-          apiKey: env.GEMINI_API_KEY,
+          apiKeys,
           model: env.GEMINI_LIVE_MODEL,
           passcode: env.DEMO_CODE,
-          missingKeyHint: 'Set GEMINI_API_KEY in viewer/.env.local and restart npm run dev.',
+          missingKeyHint: 'Set GEMINI_API_KEY (or GEMINI_API_KEYS=k1,k2) in viewer/.env.local and restart npm run dev.',
         }),
       )
       server.middlewares.use('/api/check-step', (req, res) =>
         handleCheckRequest(req, res, {
-          apiKey: env.GEMINI_API_KEY,
+          apiKeys,
           model: env.GEMINI_CHECK_MODEL,
+          fallback: { apiKey: env.DEEPSEEK_API_KEY, model: env.DEEPSEEK_CHECK_MODEL },
           passcode: env.DEMO_CODE,
-          missingKeyHint: 'Set GEMINI_API_KEY in viewer/.env.local and restart npm run dev.',
+          missingKeyHint: 'Set GEMINI_API_KEY (or GEMINI_API_KEYS=k1,k2) in viewer/.env.local and restart npm run dev.',
         }),
       )
     },
@@ -55,5 +59,19 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '') // '' prefix: server-side only, never sent to the page
   return {
     plugins: [react(), serveExports(), geminiToken(env)],
+    // Design jobs and the parts list live in the MCP server's HTTP app:
+    //   cd mcp-server && MCP_TRANSPORT=http MCP_TOKEN=dev ANTHROPIC_API_KEY=... uv run physical-studio-mcp
+    server: {
+      proxy: {
+        '/api/parts': env.MCP_HTTP_URL || 'http://localhost:8000',
+        '/api/design': env.MCP_HTTP_URL || 'http://localhost:8000',
+        '/api/build': env.MCP_HTTP_URL || 'http://localhost:8000',
+        '/api/auth': env.MCP_HTTP_URL || 'http://localhost:8000',
+        '/api/projects': env.MCP_HTTP_URL || 'http://localhost:8000',
+        '/api/bom': env.MCP_HTTP_URL || 'http://localhost:8000',
+        '/api/connect': env.MCP_HTTP_URL || 'http://localhost:8000',
+        '/api/my-projects': env.MCP_HTTP_URL || 'http://localhost:8000',
+      },
+    },
   }
 })

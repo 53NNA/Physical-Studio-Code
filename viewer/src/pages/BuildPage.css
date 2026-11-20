@@ -1,0 +1,211 @@
+.build-main { min-width: 0; min-height: 0; overflow-y: auto; padding: 16px 24px 32px; display: flex; flex-direction: column; gap: 16px; }
+.build-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.build-title h1 { min-width: 0; }
+.build-title button { flex: none; margin-top: 6px; border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 10px; font-size: 13px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.build-title button:hover { color: var(--ink); }
+.build-title button.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.build-title .count { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--bg); font-size: 11px; margin-left: 2px; text-align: center; }
+.build-section { display: flex; flex-direction: column; gap: 12px; max-width: 900px; width: 100%; }
+.build-section h2 { font-size: 18px; margin: 8px 0 0; }
+.build-section h3 { font-size: 15px; margin: 8px 0 0; }
+.build-section .lede { font-size: 15px; line-height: 1.5; margin: 0; }
+.build-section .muted, .build-wait .muted { color: var(--muted); font-size: 13px; margin: 0; line-height: 1.45; }
+.step-title { font-size: 22px !important; margin: 0 !important; }
+.step-picture { width: 100%; height: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.step-figure { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.new-parts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; line-height: 1.45; }
+.glance { margin: 10px 0 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.45; }
+.step-text { font-size: 15px; line-height: 1.5; margin: 0; white-space: pre-line; } /* wiring steps: one connection per line */
+.markers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.markers li { display: flex; gap: 10px; align-items: baseline; }
+.marker-n { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; display: grid; place-items: center; }
+.markers code, .commit-head code { font-size: 12px; background: var(--bg); border-radius: 4px; padding: 1px 5px; }
+.build-table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.build-table th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); background: var(--bg); padding: 8px 10px; }
+.build-table td { padding: 8px 10px; border-top: 1px solid var(--line); vertical-align: top; line-height: 1.4; }
+.pin-map { margin-top: 10px; }
+.pin-map caption { caption-side: top; text-align: left; font-weight: 600; padding: 4px 2px 6px; }
+.pin-map td:first-child { white-space: nowrap; }
+.pill { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.commit-box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.commit-box h3 { margin: 0 !important; }
+.commit-box.dragging { border: 2px dashed var(--accent); background: var(--accent-soft); }
+.verdict-next { margin: 6px 0 0; font-weight: 600; }
+.commit-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.commit-note { flex: 1; min-width: 200px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; }
+.commit-note:focus { outline: none; border-color: var(--accent); }
+.commit-thumbs { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.commit-thumbs li { position: relative; width: 64px; height: 64px; }
+.commit-thumbs img { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+.commit-thumbs button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border: 0; border-radius: 50%; background: rgba(31, 41, 51, .75); color: #fff; font-size: 12px; line-height: 1; padding: 0; cursor: pointer; }
+.build-main button.tool, .build-main a.tool { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 8px 12px; font-size: 14px; cursor: pointer; color: var(--ink); text-decoration: none; }
+.build-main button.tool:disabled { opacity: .45; cursor: default; }
+.build-main button.primary { border: 0; background: var(--accent); color: #fff; font-weight: 600; border-radius: 8px; padding: 9px 16px; font-size: 14px; cursor: pointer; }
+.build-main button.primary:disabled { opacity: .45; cursor: default; }
+.verdict { display: flex; gap: 12px; align-items: flex-start; border-radius: 10px; padding: 10px 12px; font-size: 14px; line-height: 1.45; border: 1px solid; }
+.verdict img { width: 96px; height: 72px; object-fit: cover; border-radius: 6px; flex: none; }
+.verdict.ok { background: #e9f8ee; border-color: #b7e4c5; }
+.verdict.bad { background: #fde8e8; border-color: #f8b4b4; }
+.verdict.wait { background: var(--accent-soft); border-color: #a9e2ea; }
+.verdict.warn { background: #fff7e6; border-color: #ffd98a; }
+.verdict-fix { margin: 6px 0 0; }
+.verdict-fix span { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--warn); margin-right: 4px; }
+.error-text { color: #9b1c1c; font-size: 14px; margin: 0; }
+.build-fold { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.build-fold summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.build-fold pre { overflow-x: auto; font-size: 12.5px; line-height: 1.5; background: #1f2933; color: #e6edf3; border-radius: 8px; padding: 12px; margin: 10px 0 0; }
+.commits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.commit-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.commit-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; }
+.commit-n { font-weight: 700; color: var(--accent); }
+.commit-message { margin: 0; font-size: 14px; }
+.commit-images { display: flex; gap: 6px; overflow-x: auto; }
+.commit-images img { height: 84px; border-radius: 6px; border: 1px solid var(--line); }
+.build-nav { display: flex; justify-content: space-between; max-width: 900px; width: 100%; }
+.build-wait { display: grid; place-items: start center; }
+.build-wait-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px 24px; width: min(640px, 100%); }
+.build-wait-card h1 { font-size: 20px; margin: 6px 0 12px; line-height: 1.35; }
+.build-wait .phases { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+.build-wait .phases li { display: flex; gap: 10px; color: var(--muted); }
+.build-wait .phases li.done, .build-wait .phases li.active { color: var(--ink); }
+.build-wait .phases .mark { width: 16px; flex: none; text-align: center; }
+.build-wait .phases li.done .mark { color: #1d7a3e; }
+.build-wait .phases li.active .mark { color: var(--accent); animation: build-pulse 1.2s infinite; }
+@keyframes build-pulse { 50% { opacity: .35; } }
+@media (max-width: 760px) {
+  .build-main { padding: 12px 16px 24px; }
+}
+
+/* Hardware builds: steps folded by section in the sidebar; the open section is the one you're on. */
+.steps.nested { padding: 0 0 4px 14px; overflow: visible; flex: none; }
+.step-section .section-head { font-weight: 600; color: var(--ink); }
+.step-section .section-head.current { color: var(--accent); }
+.step-section .chev { flex: none; width: 24px; text-align: center; color: var(--muted); }
+.step-section .section-name { flex: 1; min-width: 0; }
+.step-section .section-count { flex: none; font-size: 12px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* The project summary under the title: 3 lines at most, editable by the owner. */
+.summary-text { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.summary-button { margin-top: 4px; padding: 0; border: 0; background: none; color: var(--accent); font-size: 12px; cursor: pointer; }
+.summary-button:hover { text-decoration: underline; }
+.summary-edit { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.summary-edit textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; line-height: 1.4; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
+.step-tools { margin: 0 0 12px; font-size: 14px; }
+.step-tools span { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-right: 6px; }
+.step-picture-wrap { position: relative; line-height: 0; }
+.wire-overlay { position: absolute; inset: 0; width: 100%; height: 100%; overflow: hidden; border-radius: 10px; }
+.wire-hit { fill: none; stroke: transparent; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; pointer-events: stroke; cursor: pointer; }
+.wire-hit:hover { stroke: rgba(38, 198, 218, 0.35); }
+.wire-glow { fill: none; stroke: #26c6da; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; opacity: 0.55; }
+.wire-core { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.wire-dot { fill: #26c6da; stroke: #fff; stroke-width: 2; }
+.wire-dot-tag { font-size: 11px; font-weight: 700; fill: #06343a; }
+.wire-pin-label { font-size: 13px; font-weight: 600; fill: #1f2933; paint-order: stroke; stroke: rgba(255, 255, 255, 0.95); stroke-width: 4px; stroke-linejoin: round; }
+.wire-info { margin: 0; font-size: 14px; }
+/* Step picture size handle (bottom-right corner); the figure's max-width is set from it. */
+.step-figure { width: 100%; }
+.picture-resize { position: absolute; right: 2px; bottom: 2px; z-index: 1; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); background: rgba(255, 255, 255, 0.85); cursor: nwse-resize; touch-action: none; user-select: none; }
+.picture-resize:hover, .picture-resize:focus-visible { color: var(--accent); background: var(--accent-soft); outline: none; }
+/* Step animation: the breadboard SVG drawn inline, the hardware motion frames laid exactly over the step
+   picture (inside its 1px border, so nothing shifts or scales), and Replay + scrub below. */
+.step-frame { position: absolute; inset: 1px; border-radius: 9px; background-repeat: no-repeat; pointer-events: none; }
+.wire-draw { pointer-events: none; }
+.wire-draw polyline { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.wire-draw-shadow { stroke: rgba(0, 0, 0, 0.3); stroke-width: 6; }
+.wire-draw-core { stroke-width: 3.6; }
+.step-anim { display: flex; align-items: center; gap: 10px; }
+.step-anim-replay { display: inline-flex; align-items: center; gap: 6px; flex: none; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 4px 12px 4px 9px; font-size: 13px; cursor: pointer; }
+.step-anim-replay:hover:not(:disabled), .step-anim-replay:focus-visible { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); outline: none; }
+.step-anim-replay:disabled { color: var(--muted); cursor: default; }
+.step-anim-replay svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.step-anim input[type='range'] { flex: 1; min-width: 80px; accent-color: var(--accent); cursor: pointer; }
+.step-anim-pct { flex: none; width: 40px; text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.picture-resize svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+/* "Something wrong with this step?" (ReportStep) */
+button.link { background: none; border: none; padding: 0; color: var(--muted); font-size: 13px; text-decoration: underline; cursor: pointer; }
+button.link:hover { color: var(--ink); }
+.report-step { align-self: flex-start; }
+form.report-step { display: flex; flex-direction: column; gap: 8px; align-self: stretch; }
+form.report-step textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; color: var(--ink); background: var(--panel); resize: vertical; }
+.buy-links { white-space: nowrap; font-size: 13px; }
+.buy-links a { color: var(--accent); }
+/* Code tab and test checkpoints */
+.code-block { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.code-actions { display: flex; gap: 6px; }
+.code-block pre { overflow-x: auto; font-size: 12.5px; line-height: 1.5; background: #1f2933; color: #e6edf3; border-radius: 8px; padding: 12px; margin: 0; max-height: 480px; }
+.test-badge { display: inline-block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; padding: 1px 6px; border-radius: 999px; background: #fef3c7; color: #92400e; margin-left: 6px; vertical-align: middle; }
+.test-card { border: 1px dashed #f59e0b; background: #fffbeb; border-radius: 12px; padding: 10px 14px; }
+.test-card summary { cursor: pointer; font-weight: 600; }
+.test-card summary .test-badge { margin-left: 0; margin-right: 4px; }
+.test-card p { margin: 8px 0 0; line-height: 1.5; }
+.test-list { padding-left: 20px; display: flex; flex-direction: column; gap: 18px; }
+.test-list h3 { margin: 0 0 4px; font-size: 16px; }
+.test-list p { margin: 6px 0; line-height: 1.5; }
+
+.checks-note { font-size: 13px; line-height: 1.45; margin: 8px 0 0; border-radius: 8px; padding: 8px 12px; }
+.checks-passed { color: #1d6b45; background: #e8f5ee; }
+.checks-failed { color: #8a2a1f; background: #fbeceb; border: 1px solid #f0c2bd; }
+.checks-warning { color: #7a5200; background: #fdf4e3; border: 1px solid #f0dcae; }
+.checks-failed ul, .checks-warning ul { margin: 6px 0; padding-left: 18px; }
+
+.step-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.step-progress { display: flex; gap: 8px; font-size: 13px; color: var(--muted); }
+.step-progress span { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+.step-progress i { font-style: normal; }
+.step-progress b { color: var(--ink); }
+
+.step-why { margin: 0 0 6px; font-size: 15px; color: var(--muted); font-style: italic; }
+
+.step-reference { margin: 4px 0 18px; }
+.step-reference summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+.step-reference[open] summary { margin-bottom: 8px; }
+
+/* ---- Polish pass (design system): calmer sidebar with a progress bar, a readable step column, and the
+   Back / Next bar pinned to the bottom so the next step is always one tap away. The big step number stays. ---- */
+.sidebar { background: var(--panel-2); }
+.sidebar header { padding: 22px 20px 16px; border-bottom: 1px solid var(--line); }
+.sidebar h1 { font-size: 19px; letter-spacing: -0.02em; }
+.build-progress { height: 4px; border-radius: var(--r-pill); background: var(--line); overflow: hidden; margin: 14px 0 4px; }
+.build-progress > i { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width .4s var(--ease); }
+.build-progress-label { font-size: var(--t-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+.steps { padding: 8px 12px; }
+.steps .num { font-variant-numeric: tabular-nums; }
+
+.build-main { padding: 28px clamp(20px, 4vw, 56px) 0; gap: 18px; }
+.build-section { max-width: 900px; }
+.step-title { font-size: 28px !important; letter-spacing: -0.025em; line-height: 1.15; text-wrap: balance; }
+.step-why { font-size: 16px; color: var(--ink-2); }
+.step-text { font-size: 16px; line-height: 1.6; }
+.markers li { align-items: center; }
+p.check { background: var(--accent-soft); color: var(--accent-ink); border-radius: var(--r-sm); padding: 10px 14px; margin: 4px 0 !important; font-size: var(--t-sm) !important; line-height: 1.5; }
+p.check span { color: var(--accent-strong); }
+.verdict.ok { background: var(--ok-soft); }
+.verdict.bad { background: var(--bad-soft); }
+.build-fold pre, .code-block pre { background: var(--code-bg); font-family: var(--mono); }
+
+.build-nav { position: sticky; bottom: 0; z-index: 3; width: auto; max-width: none; align-items: center; margin: auto calc(-1 * clamp(20px, 4vw, 56px)) 0; padding: 12px calc(clamp(20px, 4vw, 56px) + max(0px, (100% - 900px) / 2)); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--line); }
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .sidebar { max-height: 30vh; }
+  .sidebar header { padding: 12px 16px 10px; }
+  .sidebar .summary, .sidebar .share-button { display: none; }
+  .build-main { padding: 18px 16px 0; }
+  .build-nav { margin: auto -16px 0; padding: 10px 16px; }
+  .step-title { font-size: 23px !important; }
+}
+
+/* Bottom bar: Back · Play build · a step timeline (Flatpack's) · Next */
+.build-nav { gap: 12px; }
+.build-main button.play-build { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+.build-main button.play-build svg { width: 14px; height: 14px; fill: currentColor; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.build-main button.play-build.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.step-timeline { flex: 1; min-width: 0; display: flex; align-items: center; gap: 3px; height: 28px; }
+.step-timeline button { position: relative; flex: 1 1 0; min-width: 3px; height: 6px; padding: 0; border: 0; border-radius: var(--r-pill); background: var(--line-strong); cursor: pointer; overflow: hidden; transition: height .15s var(--ease, ease), background .2s; }
+.step-timeline button:hover { height: 10px; background: color-mix(in srgb, var(--accent) 45%, var(--line-strong)); }
+.step-timeline button.done { background: color-mix(in srgb, var(--accent) 55%, var(--panel)); }
+.step-timeline button.active { height: 10px; background: var(--accent); }
+.step-timeline button.section-start { margin-left: 7px; }
+.step-timeline button > i { position: absolute; inset: 0; background: var(--accent-strong); transform-origin: left; animation: step-play linear forwards; }
+@keyframes step-play { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.step-count { flex: none; min-width: 48px; text-align: center; font-size: var(--t-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) { .step-count { display: none; } .build-main button.play-build { padding: 8px 10px; font-size: 0; gap: 0; } .build-main button.play-build svg { width: 16px; height: 16px; } }
